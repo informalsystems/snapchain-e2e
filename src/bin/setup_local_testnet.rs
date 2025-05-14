@@ -98,13 +98,19 @@ async fn main() {
         let rpc_port = base_rpc_port + i;
         let http_port = base_http_port + i;
         let gossip_port = base_gossip_port + i;
-        let host = format!("127.0.0.1");
+        let host = format!("0.0.0.0");
         let rpc_address = format!("{host}:{rpc_port}");
         let http_address = format!("{host}:{http_port}");
         let gossip_multi_addr = format!("/ip4/{host}/udp/{gossip_port}/quic-v1");
         let other_nodes_addresses = (1..=num_nodes)
             .filter(|&x| x != id)
-            .map(|x| format!("/ip4/127.0.0.1/udp/{:?}/quic-v1", base_gossip_port + x))
+            .map(|x| {
+                format!(
+                    "/ip4/172.100.0.1{}/udp/{:?}/quic-v1",
+                    x,
+                    base_gossip_port + x
+                )
+            })
             .collect::<Vec<String>>()
             .join(",");
 
