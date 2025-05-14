@@ -14,6 +14,7 @@ services:
       - "50051:50051/udp"
       - "3381:3381/tcp"
       - "3383:3383/tcp"
+      - "3483:3483"
     networks:
       snapchain-subnet:
         ipv4_address: 172.100.0.11
@@ -25,6 +26,7 @@ services:
     ports:
       - "50052:50052/udp"
       - "3384:3384/tcp"
+      - "3484:3484"
     networks:
       snapchain-subnet:
         ipv4_address: 172.100.0.12
@@ -36,6 +38,7 @@ services:
     ports:
       - "50053:50053/udp"
       - "3385:3385/tcp"
+      - "3485:3485"
     networks:
       snapchain-subnet:
         ipv4_address: 172.100.0.13
@@ -47,6 +50,7 @@ services:
     ports:
       - "50054:50054/udp"
       - "3386:3386/tcp"
+      - "3486:3486"
     networks:
       snapchain-subnet:
         ipv4_address: 172.100.0.14
