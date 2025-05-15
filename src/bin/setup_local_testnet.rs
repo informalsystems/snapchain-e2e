@@ -26,7 +26,7 @@ struct Args {
     #[arg(long, default_value = "snapchain")]
     statsd_prefix: String,
 
-    #[arg(long, default_value = "127.0.0.1:8125")]
+    #[arg(long, default_value = "172.100.0.2:8125")]
     statsd_addr: String,
 
     #[arg(long, default_value = "false")]
