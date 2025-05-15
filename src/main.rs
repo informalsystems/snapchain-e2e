@@ -1,7 +1,9 @@
+use axum::routing::get;
+use axum::Router;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
-use informalsystems_malachitebft_metrics::{Metrics, SharedRegistry};
+use informalsystems_malachitebft_metrics::{export, SharedRegistry};
 use snapchain::connectors::onchain_events::{L1Client, OnchainEventsRequest, RealL1Client};
 use snapchain::consensus::consensus::SystemMessage;
 use snapchain::mempool::mempool::{Mempool, MempoolRequest, ReadNodeMempool};
@@ -23,7 +25,7 @@ use snapchain::storage::store::BlockStore;
 use snapchain::utils::statsd_wrapper::StatsdClientWrapper;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::process;
 use std::sync::Arc;
 use std::{fs, net};
@@ -334,8 +336,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
 
     let registry = SharedRegistry::global();
-    // Use the new non-global metrics registry when we upgrade to newer version of malachite
-    let _ = Metrics::register(registry);
+
+    // Malachite-Snapchain E2E tests metrics server
+    tokio::spawn(async move {
+        let app = Router::new().route(
+            "/metrics",
+            get(|| async {
+                let mut buf = String::new();
+                export(&mut buf);
+                buf
+            }),
+        );
+        let listener = TcpListener::bind(SocketAddr::new(IpAddr::from([0, 0, 0, 0]), 9000))
+            .await
+            .unwrap();
+        let local_addr = listener.local_addr().unwrap();
+        info!(address = %local_addr, "Serving metrics");
+        if let Err(e) = axum::serve(listener, app).await {
+            error!("Error serving metrics: {}", e);
+        }
+    });
+
     let (messages_request_tx, messages_request_rx) = mpsc::channel(100);
 
     let l1_client: Option<Box<dyn L1Client>> =

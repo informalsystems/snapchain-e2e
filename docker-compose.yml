@@ -9,7 +9,7 @@ x-common: &common
 services:
   node1:
     <<: *common
-    command: ["./snapchain", "--config-path", "/app/data/snapchain.toml"]
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50051:50051/udp" # gossip
       - "3381:3381/tcp" # not used?
@@ -22,7 +22,7 @@ services:
       - ./nodes/1:/app/data
   node2:
     <<: *common
-    command: ["./snapchain", "--config-path", "/app/data/snapchain.toml"]
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50052:50052/udp"
       - "3384:3384/tcp"
@@ -34,7 +34,7 @@ services:
       - ./nodes/2:/app/data
   node3:
     <<: *common
-    command: ["./snapchain", "--config-path", "/app/data/snapchain.toml"]
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50053:50053/udp"
       - "3385:3385/tcp"
@@ -46,7 +46,7 @@ services:
       - ./nodes/3:/app/data
   node4:
     <<: *common
-    command: ["./snapchain", "--config-path", "/app/data/snapchain.toml"]
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50054:50054/udp"
       - "3386:3386/tcp"
@@ -56,6 +56,19 @@ services:
         ipv4_address: 172.100.0.14
     volumes:
       - ./nodes/4:/app/data
+
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    restart: unless-stopped
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.4
+    ports:
+      - 9090:9090
+    volumes:
+      - ./grafana/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./grafana/prometheus/data:/prometheus
 
   graphite:
     image: graphiteapp/graphite-statsd:1.1.10-5
@@ -72,6 +85,7 @@ services:
 
   grafana:
     image: grafana/grafana:10.0.3
+    container_name: grafana
     # profiles: [monitoring]
     restart: unless-stopped
     networks:
