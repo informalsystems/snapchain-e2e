@@ -118,10 +118,99 @@
             "uid": "P1D261A8554D2DA69"
           },
           "refId": "A",
-          "target": "stats.gauges.snapchain*.shard*.block_height"
+          "target": "stats.gauges.snapchain*.shard*.engine.block_height"
         }
       ],
       "title": "Block Height",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "graphite",
+        "uid": "P1D261A8554D2DA69"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 1
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "graphite",
+            "uid": "P1D261A8554D2DA69"
+          },
+          "refId": "A",
+          "target": "stats.gauges.snapchain*.gossip.connected_peers"
+        }
+      ],
+      "title": "Connected Peers",
       "type": "timeseries"
     },
     {
@@ -221,7 +310,7 @@
             "uid": "P1D261A8554D2DA69"
           },
           "refId": "A",
-          "target": "stats_counts.snapchain*.shard*.propose"
+          "target": "stats.gauges.snapchain*.shard*.engine.propose.*"
         }
       ],
       "title": "Propose",
@@ -311,7 +400,7 @@
             "uid": "P1D261A8554D2DA69"
           },
           "refId": "A",
-          "target": "stats_counts.snapchain*.shard*.validate.false"
+          "target": "stats.gauges.snapchain*.shard*.engine.validate.false"
         }
       ],
       "title": "Validate False",
@@ -401,7 +490,7 @@
             "uid": "P1D261A8554D2DA69"
           },
           "refId": "A",
-          "target": "stats_counts.snapchain*.shard*.validate.true"
+          "target": "stats.gauges.snapchain*.shard*.engine.validate.true"
         }
       ],
       "title": "Validate True",
