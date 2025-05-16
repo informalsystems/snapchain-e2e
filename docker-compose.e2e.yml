@@ -3,6 +3,8 @@ x-common: &common
     context: .
     dockerfile: Dockerfile
   init: true # Auto-reap zombie processes and forward process signals
+  cap_add:
+    - NET_ADMIN # Allow setting network parameters
   environment:
     RUST_BACKTRACE: "full"
 
