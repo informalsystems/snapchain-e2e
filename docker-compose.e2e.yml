@@ -1,0 +1,357 @@
+x-common: &common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  init: true # Auto-reap zombie processes and forward process signals
+  environment:
+    RUST_BACKTRACE: "full"
+
+services:
+  node1:
+    <<: *common
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
+    ports:
+      - "50051:50051/udp" # gossip
+      - "3381:3381/tcp" # not used?
+      - "3383:3383/tcp" # rpc
+      - "3483:3483" # http
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.11
+    volumes:
+      - ./nodes/1:/app/data
+  node2:
+    <<: *common
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
+    ports:
+      - "50052:50052/udp"
+      - "3384:3384/tcp"
+      - "3484:3484"
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.12
+    volumes:
+      - ./nodes/2:/app/data
+  node3:
+    <<: *common
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
+    ports:
+      - "50053:50053/udp"
+      - "3385:3385/tcp"
+      - "3485:3485"
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.13
+    volumes:
+      - ./nodes/3:/app/data
+  node4:
+    <<: *common
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
+    ports:
+      - "50054:50054/udp"
+      - "3386:3386/tcp"
+      - "3486:3486"
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.14
+    volumes:
+      - ./nodes/4:/app/data
+  node5:
+    <<: *common
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
+    ports:
+      - "50055:50055/udp"
+      - "3387:3387/tcp"
+      - "3487:3487"
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.15
+    volumes:
+      - ./nodes/5:/app/data
+  node6:
+    <<: *common
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
+    ports:
+      - "50056:50056/udp"
+      - "3388:3388/tcp"
+      - "3488:3488"
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.16
+    volumes:
+      - ./nodes/6:/app/data
+  node7:
+    <<: *common
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
+    ports:
+      - "50057:50057/udp"
+      - "3389:3389/tcp"
+      - "3489:3489"
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.17
+    volumes:
+      - ./nodes/7:/app/data
+  node8:
+    <<: *common
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
+    ports:
+      - "50058:50058/udp"
+      - "3390:3390/tcp"
+      - "3490:3490"
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.18
+    volumes:
+      - ./nodes/8:/app/data
+  node9:
+    <<: *common
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
+    ports:
+      - "50059:50059/udp"
+      - "3391:3391/tcp"
+      - "3491:3491"
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.19
+    volumes:
+      - ./nodes/9:/app/data
+  node10:
+    <<: *common
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
+    ports:
+      - "50060:50060/udp"
+      - "3392:3392/tcp"
+      - "3492:3492"
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.20
+    volumes:
+      - ./nodes/10:/app/data
+  node11:
+    <<: *common
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
+    ports:
+      - "50061:50061/udp"
+      - "3393:3393/tcp"
+      - "3493:3493"
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.21
+    volumes:
+      - ./nodes/11:/app/data
+  node12:
+    <<: *common
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
+    ports:
+      - "50062:50062/udp"
+      - "3394:3394/tcp"
+      - "3494:3494"
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.22
+    volumes:
+      - ./nodes/12:/app/data
+  node13:
+    <<: *common
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
+    ports:
+      - "50063:50063/udp"
+      - "3395:3395/tcp"
+      - "3495:3495"
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.23
+    volumes:
+      - ./nodes/13:/app/data
+  node14:
+    <<: *common
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
+    ports:
+      - "50064:50064/udp"
+      - "3396:3396/tcp"
+      - "3496:3496"
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.24
+    volumes:
+      - ./nodes/14:/app/data
+  node15:
+    <<: *common
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
+    ports:
+      - "50065:50065/udp"
+      - "3397:3397/tcp"
+      - "3497:3497"
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.25
+    volumes:
+      - ./nodes/15:/app/data
+  node16:
+    <<: *common
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
+    ports:
+      - "50066:50066/udp"
+      - "3398:3398/tcp"
+      - "3498:3498"
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.26
+    volumes:
+      - ./nodes/16:/app/data
+  node17:
+    <<: *common
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
+    ports:
+      - "50067:50067/udp"
+      - "3399:3399/tcp"
+      - "3499:3499"
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.27
+    volumes:
+      - ./nodes/17:/app/data
+  node18:
+    <<: *common
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
+    ports:
+      - "50068:50068/udp"
+      - "3400:3400/tcp"
+      - "3500:3500"
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.28
+    volumes:
+      - ./nodes/18:/app/data
+  node19:
+    <<: *common
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
+    ports:
+      - "50069:50069/udp"
+      - "3401:3401/tcp"
+      - "3501:3501"
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.29
+    volumes:
+      - ./nodes/19:/app/data
+  node20:
+    <<: *common
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
+    ports:
+      - "50070:50070/udp"
+      - "3402:3402/tcp"
+      - "3502:3502"
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.30
+    volumes:
+      - ./nodes/20:/app/data
+  node21:
+    <<: *common
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
+    ports:
+      - "50071:50071/udp"
+      - "3403:3403/tcp"
+      - "3503:3503"
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.31
+    volumes:
+      - ./nodes/21:/app/data
+  node22:
+    <<: *common
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
+    ports:
+      - "50072:50072/udp"
+      - "3404:3404/tcp"
+      - "3504:3504"
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.32
+    volumes:
+      - ./nodes/22:/app/data
+  node23:
+    <<: *common
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
+    ports:
+      - "50073:50073/udp"
+      - "3405:3405/tcp"
+      - "3505:3505"
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.33
+    volumes:
+      - ./nodes/23:/app/data
+  node24:
+    <<: *common
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
+    ports:
+      - "50074:50074/udp"
+      - "3406:3406/tcp"
+      - "3506:3506"
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.34
+    volumes:
+      - ./nodes/24:/app/data
+  node25:
+    <<: *common
+    command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
+    ports:
+      - "50075:50075/udp"
+      - "3407:3407/tcp"
+      - "3507:3507"
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.35
+    volumes:
+      - ./nodes/25:/app/data
+
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    restart: unless-stopped
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.4
+    ports:
+      - 9090:9090
+    volumes:
+      - ./grafana/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./grafana/prometheus/data:/prometheus
+
+  graphite:
+    image: graphiteapp/graphite-statsd:1.1.10-5
+    # profiles: [monitoring]
+    restart: unless-stopped
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.2
+    ports:
+      - '8125:8125/udp' # statsd udp
+      - '8080:8080' # http server
+    volumes:
+      - ./grafana/graphite/storage:/opt/graphite/storage
+
+  grafana:
+    image: grafana/grafana:10.0.3
+    container_name: grafana
+    # profiles: [monitoring]
+    restart: unless-stopped
+    networks:
+      snapchain-subnet:
+        ipv4_address: 172.100.0.3
+    ports:
+      - '3000:3000' # grafana web
+    volumes:
+      - ./grafana/grafana:/etc/grafana
+      - ./grafana/grafana/data:/var/lib/grafana
+
+networks:
+  snapchain-subnet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.100.0.0/24
