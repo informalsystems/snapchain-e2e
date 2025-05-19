@@ -17,15 +17,15 @@ mod tests {
     use crate::network::server::MyHubService;
     use crate::proto::hub_service_server::HubService;
     use crate::proto::{
-        self, EventRequest, EventsRequest, HubEvent, HubEventType, ShardChunk, UserNameProof,
-        UserNameType, UsernameProofRequest, VerificationAddAddressBody,
+        self, EventRequest, EventsRequest, HubEvent, HubEventType, OnChainEventType, ShardChunk,
+        UserNameProof, UserNameType, UsernameProofRequest, VerificationAddAddressBody,
     };
     use crate::proto::{FidRequest, SubscribeRequest};
     use crate::storage::db::{self, RocksDB, RocksDbTransactionBatch};
     use crate::storage::store::account::{HubEventIdGenerator, SEQUENCE_BITS};
     use crate::storage::store::engine::{Senders, ShardEngine};
     use crate::storage::store::stores::Stores;
-    use crate::storage::store::test_helper::register_user;
+    use crate::storage::store::test_helper::{commit_event, generate_signer, register_user};
     use crate::storage::store::{test_helper, BlockStore};
     use crate::storage::trie::merkle_trie;
     use crate::utils::factory::{events_factory, messages_factory};
@@ -1200,6 +1200,13 @@ mod tests {
         )
         .await;
         test_helper::register_user(
+            SHARD1_FID + 2, // another fid for shard 1
+            test_helper::default_signer(),
+            test_helper::default_custody_address(),
+            &mut engine1,
+        )
+        .await;
+        test_helper::register_user(
             SHARD2_FID,
             test_helper::default_signer(),
             test_helper::default_custody_address(),
@@ -1210,20 +1217,26 @@ mod tests {
         let shard1_response = service
             .get_fids(Request::new(proto::FidsRequest {
                 shard_id: 1,
-                page_size: None,
+                page_size: Some(1),
                 page_token: None,
                 reverse: None,
             }))
             .await
             .unwrap();
+        let res = shard1_response.into_inner();
+        assert_eq!(res.fids, vec![SHARD1_FID]);
+        assert!(res.next_page_token.is_some());
 
-        let shard1_ref = shard1_response.get_ref();
-
-        let shard1_fids = &shard1_ref.fids;
-
-        assert_eq!(*shard1_fids, vec![SHARD1_FID]);
-
-        assert_eq!(shard1_ref.next_page_token, vec![110, 117, 108, 108].into());
+        let shard1_response = service
+            .get_fids(Request::new(proto::FidsRequest {
+                shard_id: 1,
+                page_size: None,
+                page_token: res.next_page_token.clone(),
+                reverse: None,
+            }))
+            .await
+            .unwrap();
+        assert_eq!(shard1_response.into_inner().fids, vec![SHARD1_FID + 2]);
 
         let shard2_response = service
             .get_fids(Request::new(proto::FidsRequest {
@@ -1234,14 +1247,10 @@ mod tests {
             }))
             .await
             .unwrap();
-
         let shard2_ref = shard2_response.get_ref();
-
         let shard2_fids = &shard2_ref.fids;
-
         assert_eq!(*shard2_fids, vec![SHARD2_FID]);
-
-        assert_eq!(shard2_ref.next_page_token, vec![110, 117, 108, 108].into());
+        assert_eq!(shard2_ref.next_page_token, None);
     }
 
     #[tokio::test]
@@ -1271,5 +1280,64 @@ mod tests {
         } else {
             panic!("Expected IdRegisterEventBody");
         }
+    }
+
+    #[tokio::test]
+    async fn test_get_on_chain_signers_by_fid() {
+        let (_stores, _senders, [mut engine1, _], service) = make_server(None).await;
+        let fid = SHARD1_FID;
+        let signer = test_helper::default_signer();
+        let owner = test_helper::default_custody_address();
+
+        // Register user to create signer event
+        test_helper::register_user(fid, signer.clone(), owner.clone(), &mut engine1).await;
+
+        let signer_event = events_factory::create_signer_event(
+            fid,
+            generate_signer(),
+            proto::SignerEventType::Add,
+            None,
+            None,
+        );
+        commit_event(&mut engine1, &signer_event).await;
+
+        // Non-signer key
+        let signer_event = events_factory::create_signer_event(
+            fid,
+            generate_signer(),
+            proto::SignerEventType::Add,
+            None,
+            Some(2),
+        );
+        commit_event(&mut engine1, &signer_event).await;
+
+        // Test normal request
+        let request = Request::new(FidRequest {
+            fid,
+            page_size: Some(1),
+            page_token: None,
+            reverse: None,
+        });
+        let response = service.get_on_chain_signers_by_fid(request).await.unwrap();
+        let events = response.get_ref().events.clone();
+        assert_eq!(events.len(), 1);
+        assert!(events
+            .iter()
+            .all(|event| event.r#type() == OnChainEventType::EventTypeSigner));
+
+        // Test pagination
+        let request = Request::new(FidRequest {
+            fid,
+            page_size: None,
+            page_token: response.get_ref().next_page_token.clone(),
+            reverse: None,
+        });
+        let response = service.get_on_chain_signers_by_fid(request).await.unwrap();
+        let events = response.get_ref().events.clone();
+        // only 2 keys total, non-signer key is not returned
+        assert_eq!(events.len(), 1);
+        assert!(events
+            .iter()
+            .all(|event| event.r#type() == OnChainEventType::EventTypeSigner));
     }
 }

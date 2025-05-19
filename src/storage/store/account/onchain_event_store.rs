@@ -296,6 +296,57 @@ pub fn get_onchain_events(
     })
 }
 
+pub fn get_onchain_events_with_filter<F>(
+    db: &RocksDB,
+    page_options: &PageOptions,
+    event_type: OnChainEventType,
+    fid: Option<u64>,
+    filter: F,
+) -> Result<OnchainEventsPage, OnchainEventStorageError>
+where
+    F: Fn(&OnChainEvent) -> bool,
+{
+    let mut start_prefix = make_onchain_event_type_prefix(event_type);
+
+    if let Some(fid) = &fid {
+        start_prefix.extend(make_fid_key(*fid));
+    }
+
+    let stop_prefix = increment_vec_u8(&start_prefix);
+
+    let mut onchain_events = vec![];
+    let mut last_key = vec![];
+    db.for_each_iterator_by_prefix(
+        Some(start_prefix),
+        Some(stop_prefix),
+        page_options,
+        |key, value| {
+            let onchain_event = OnChainEvent::decode(value).map_err(|e| HubError::from(e))?;
+            if filter(&onchain_event) {
+                onchain_events.push(onchain_event);
+
+                if onchain_events.len() >= page_options.page_size.unwrap_or(PAGE_SIZE_MAX) {
+                    last_key = key.to_vec();
+                    return Ok(true); // Stop iterating
+                }
+            }
+
+            Ok(false) // Continue iterating
+        },
+    )
+    .map_err(|e| OnchainEventStorageError::HubError(e))?; // TODO: Return the right error
+    let next_page_token = if last_key.len() > 0 {
+        Some(last_key)
+    } else {
+        None
+    };
+
+    Ok(OnchainEventsPage {
+        onchain_events,
+        next_page_token,
+    })
+}
+
 #[derive(Clone, Debug)]
 pub struct StorageSlot {
     pub legacy_units: u32,
@@ -423,6 +474,32 @@ impl OnchainEventStore {
         }
 
         Ok(onchain_events)
+    }
+
+    pub fn is_signer_key(signer_event_body: &SignerEventBody) -> bool {
+        signer_event_body.key_type == SUPPORTED_SIGNER_KEY_TYPE
+    }
+
+    pub fn get_signers(
+        &self,
+        fid: Option<u64>,
+        page_options: &PageOptions,
+    ) -> Result<OnchainEventsPage, OnchainEventStorageError> {
+        get_onchain_events_with_filter(
+            &self.db,
+            &page_options,
+            OnChainEventType::EventTypeSigner,
+            fid,
+            |onchain_event: &OnChainEvent| match &onchain_event.body {
+                None => false,
+                Some(body) => match body {
+                    on_chain_event::Body::SignerEventBody(signer_event_body) => {
+                        Self::is_signer_key(signer_event_body)
+                    }
+                    _ => false,
+                },
+            },
+        )
     }
 
     pub fn get_fids(

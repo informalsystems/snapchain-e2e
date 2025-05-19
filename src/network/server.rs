@@ -767,17 +767,14 @@ impl HubService for MyHubService {
             reverse: inner_request.reverse.unwrap_or(false),
         };
 
-        let (fids, raw_next_page_token) = stores
+        let (fids, next_page_token) = stores
             .onchain_event_store
             .get_fids(&page_options)
             .unwrap_or((vec![], None));
 
-        let next_page_token = serde_json::to_vec(&raw_next_page_token)
-            .map_err(|e| Status::internal(format!("Failed to serialize next_page_token: {}", e)))?;
-
         Ok(Response::new(FidsResponse {
             fids,
-            next_page_token: Some(next_page_token),
+            next_page_token,
         }))
     }
 
@@ -1720,20 +1717,23 @@ impl HubService for MyHubService {
     ) -> Result<Response<OnChainEventResponse>, Status> {
         let req = request.into_inner();
         let fid = req.fid;
-        let event_type = proto::OnChainEventType::EventTypeSigner;
 
-        let mut combined_events = Vec::new();
-        for (_shard_id, stores) in &self.shard_stores {
-            let events = stores
-                .onchain_event_store
-                .get_onchain_events(event_type, Some(fid))
-                .map_err(|e| Status::internal(format!("Store error: {:?}", e)))?;
-            combined_events.extend(events);
-        }
+        let stores = self.get_stores_for(fid)?;
+        let events_page = stores
+            .onchain_event_store
+            .get_signers(
+                Some(fid),
+                &PageOptions {
+                    page_size: req.page_size.map(|s| s as usize),
+                    page_token: req.page_token.clone(),
+                    reverse: req.reverse.unwrap_or(false),
+                },
+            )
+            .map_err(|e| Status::internal(format!("Store error: {:?}", e)))?;
 
         let response = OnChainEventResponse {
-            events: combined_events,
-            next_page_token: None,
+            events: events_page.onchain_events,
+            next_page_token: events_page.next_page_token,
         };
         Ok(Response::new(response))
     }

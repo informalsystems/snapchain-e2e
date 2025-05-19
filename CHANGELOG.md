@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.20] - 2025-05-16
+
+### 🐛 Bug Fixes
+
+- Update tests that depend on hubs being up (#493)
+- Process signer revoke messages as expected (#492)
+
+## [0.2.19] - 2025-05-15
+
+### 🐛 Bug Fixes
+
+- Make sure to check key_type for signers (#484)
+- Fix pagination for get_on_chain_signers_by_fid (#486)
+
+## [0.2.18] - 2025-05-15
+
+### 🐛 Bug Fixes
+
+- Fix pagination for GetFids (#482)
+
 ## [0.2.17] - 2025-05-14
 
 ### 🚀 Features
