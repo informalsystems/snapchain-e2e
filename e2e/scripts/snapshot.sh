@@ -3,9 +3,9 @@
 cd "$(dirname "$0")"
 cd ..
 
-mkdir -p e2e/logs
+mkdir -p logs
 
 for id in "$@"; do
   echo "Saving logs for node $id"
-  docker logs "snapchain-e2e-node$id-1" > "e2e/logs/node$id.log"
+  docker logs "snapchain-e2e-node$id-1" > "logs/node$id.log"
 done

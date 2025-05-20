@@ -1,6 +1,6 @@
 x-common: &common
   build:
-    context: .
+    context: ..
     dockerfile: Dockerfile
   init: true # Auto-reap zombie processes and forward process signals
   cap_add:
@@ -321,8 +321,8 @@ services:
     ports:
       - 9090:9090
     volumes:
-      - ./grafana/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - ./grafana/prometheus/data:/prometheus
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/prometheus/data:/prometheus
 
   graphite:
     image: graphiteapp/graphite-statsd:1.1.10-5
@@ -335,7 +335,7 @@ services:
       - '8125:8125/udp' # statsd udp
       - '8080:8080' # http server
     volumes:
-      - ./grafana/graphite/storage:/opt/graphite/storage
+      - ./monitoring/graphite/storage:/opt/graphite/storage
 
   grafana:
     image: grafana/grafana:10.0.3
@@ -348,8 +348,8 @@ services:
     ports:
       - '3000:3000' # grafana web
     volumes:
-      - ./grafana/grafana:/etc/grafana
-      - ./grafana/grafana/data:/var/lib/grafana
+      - ./monitoring/grafana:/etc/grafana
+      - ./monitoring/grafana/data:/var/lib/grafana
     environment:
       GF_LOG_LEVEL: info
       GF_ANALYTICS_ENABLED: false

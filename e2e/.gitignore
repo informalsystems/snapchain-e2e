@@ -1,1 +1,4 @@
 logs/
+monitoring/grafana/data/
+monitoring/graphite/
+monitoring/prometheus/data/
