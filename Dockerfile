@@ -42,7 +42,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry cargo build --release
 
 #################################################################################
 
-FROM rust:1.85
+FROM ubuntu:24.04
 
 RUN apt-get update && apt-get install -y iproute2
 
