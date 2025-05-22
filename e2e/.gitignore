@@ -2,3 +2,8 @@ logs/
 monitoring/grafana/data/
 monitoring/graphite/
 monitoring/prometheus/data/
+terraform/.terraform/
+terraform/terraform.tfvars
+terraform/terraform.tfstate*
+terraform/terraform.lock.hcl
+
