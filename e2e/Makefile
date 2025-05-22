@@ -13,8 +13,9 @@ stop:
 
 clean: stop
 	rm -rdf nodes
-	rm -rdf grafana/graphite
-	rm -rdf grafana/grafana/data
+	rm -rdf monitoring/graphite/storage
+	rm -rdf monitoring/grafana/data
+	rm -rdf monitoring/prometheus/data
 
 perturb:
 	docker compose down node25

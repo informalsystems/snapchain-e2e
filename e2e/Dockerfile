@@ -59,5 +59,6 @@ EOS
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 ENV RUSTFLAGS="-Awarnings"
+ENV RUST_LOG=debug
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["./snapchain", "--id", "1"]

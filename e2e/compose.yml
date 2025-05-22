@@ -1,22 +1,23 @@
 x-common: &common
   build:
     context: ..
-    dockerfile: Dockerfile
-  init: true # Auto-reap zombie processes and forward process signals
+    dockerfile: e2e/Dockerfile
+  init: true
   cap_add:
-    - NET_ADMIN # Allow setting network parameters
+    - NET_ADMIN
   environment:
     RUST_BACKTRACE: "full"
 
 services:
   node1:
     <<: *common
+    container_name: node1
     command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
-      - "50051:50051/udp" # gossip
-      - "3381:3381/tcp" # not used?
-      - "3383:3383/tcp" # rpc
-      - "3483:3483" # http
+      - "50051:50051/udp"
+      - "3381:3381/tcp"
+      - "3383:3383/tcp"
+      - "3483:3483"
     networks:
       snapchain-subnet:
         ipv4_address: 172.100.0.11
@@ -24,6 +25,7 @@ services:
       - ./nodes/1:/app/data
   node2:
     <<: *common
+    container_name: node2
     command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50052:50052/udp"
@@ -36,6 +38,7 @@ services:
       - ./nodes/2:/app/data
   node3:
     <<: *common
+    container_name: node3
     command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50053:50053/udp"
@@ -48,6 +51,7 @@ services:
       - ./nodes/3:/app/data
   node4:
     <<: *common
+    container_name: node4
     command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50054:50054/udp"
@@ -60,6 +64,7 @@ services:
       - ./nodes/4:/app/data
   node5:
     <<: *common
+    container_name: node5
     command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50055:50055/udp"
@@ -72,6 +77,7 @@ services:
       - ./nodes/5:/app/data
   node6:
     <<: *common
+    container_name: node6
     command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50056:50056/udp"
@@ -84,6 +90,7 @@ services:
       - ./nodes/6:/app/data
   node7:
     <<: *common
+    container_name: node7
     command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50057:50057/udp"
@@ -96,6 +103,7 @@ services:
       - ./nodes/7:/app/data
   node8:
     <<: *common
+    container_name: node8
     command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50058:50058/udp"
@@ -108,6 +116,7 @@ services:
       - ./nodes/8:/app/data
   node9:
     <<: *common
+    container_name: node9
     command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50059:50059/udp"
@@ -120,6 +129,7 @@ services:
       - ./nodes/9:/app/data
   node10:
     <<: *common
+    container_name: node10
     command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50060:50060/udp"
@@ -132,6 +142,7 @@ services:
       - ./nodes/10:/app/data
   node11:
     <<: *common
+    container_name: node11
     command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50061:50061/udp"
@@ -144,6 +155,7 @@ services:
       - ./nodes/11:/app/data
   node12:
     <<: *common
+    container_name: node12
     command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50062:50062/udp"
@@ -156,6 +168,7 @@ services:
       - ./nodes/12:/app/data
   node13:
     <<: *common
+    container_name: node13
     command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50063:50063/udp"
@@ -168,6 +181,7 @@ services:
       - ./nodes/13:/app/data
   node14:
     <<: *common
+    container_name: node14
     command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50064:50064/udp"
@@ -180,6 +194,7 @@ services:
       - ./nodes/14:/app/data
   node15:
     <<: *common
+    container_name: node15
     command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50065:50065/udp"
@@ -192,6 +207,7 @@ services:
       - ./nodes/15:/app/data
   node16:
     <<: *common
+    container_name: node16
     command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50066:50066/udp"
@@ -204,6 +220,7 @@ services:
       - ./nodes/16:/app/data
   node17:
     <<: *common
+    container_name: node17
     command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50067:50067/udp"
@@ -216,6 +233,7 @@ services:
       - ./nodes/17:/app/data
   node18:
     <<: *common
+    container_name: node18
     command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50068:50068/udp"
@@ -228,6 +246,7 @@ services:
       - ./nodes/18:/app/data
   node19:
     <<: *common
+    container_name: node19
     command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50069:50069/udp"
@@ -240,6 +259,7 @@ services:
       - ./nodes/19:/app/data
   node20:
     <<: *common
+    container_name: node20
     command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50070:50070/udp"
@@ -252,6 +272,7 @@ services:
       - ./nodes/20:/app/data
   node21:
     <<: *common
+    container_name: node21
     command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50071:50071/udp"
@@ -264,6 +285,7 @@ services:
       - ./nodes/21:/app/data
   node22:
     <<: *common
+    container_name: node22
     command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50072:50072/udp"
@@ -276,6 +298,7 @@ services:
       - ./nodes/22:/app/data
   node23:
     <<: *common
+    container_name: node23
     command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50073:50073/udp"
@@ -288,6 +311,7 @@ services:
       - ./nodes/23:/app/data
   node24:
     <<: *common
+    container_name: node24
     command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50074:50074/udp"
@@ -300,6 +324,7 @@ services:
       - ./nodes/24:/app/data
   node25:
     <<: *common
+    container_name: node25
     command: [ "./snapchain", "--config-path", "/app/data/snapchain.toml" ]
     ports:
       - "50075:50075/udp"
@@ -326,27 +351,25 @@ services:
 
   graphite:
     image: graphiteapp/graphite-statsd:1.1.10-5
-    # profiles: [monitoring]
     restart: unless-stopped
     networks:
       snapchain-subnet:
         ipv4_address: 172.100.0.2
     ports:
-      - '8125:8125/udp' # statsd udp
-      - '8080:8080' # http server
+      - '8125:8125/udp'
+      - '8080:8080'
     volumes:
       - ./monitoring/graphite/storage:/opt/graphite/storage
 
   grafana:
     image: grafana/grafana:10.0.3
     container_name: grafana
-    # profiles: [monitoring]
     restart: unless-stopped
     networks:
       snapchain-subnet:
         ipv4_address: 172.100.0.3
     ports:
-      - '3000:3000' # grafana web
+      - '3000:3000'
     volumes:
       - ./monitoring/grafana:/etc/grafana
       - ./monitoring/grafana/data:/var/lib/grafana
