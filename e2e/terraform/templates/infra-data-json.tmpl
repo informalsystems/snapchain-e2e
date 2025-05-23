@@ -1,6 +1,10 @@
 {
 	"provider": "digital-ocean",
 	"network": "${subnet}",
+    "${cc.name}": {
+        "public_ip": "${cc.ip}",
+        "private_ip": "${cc.internal_ip}"
+    },
 	"instances": ${jsonencode({
         for n in nodes:
             "${n.name}" => {

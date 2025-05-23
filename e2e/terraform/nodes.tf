@@ -18,29 +18,27 @@ resource "digitalocean_droplet" "node" {
   })
 }
 
-# Create infra file with nodes info as required by runner.
+# Create infra file with nodes info (just to have as reference).
 resource "local_file" "infra_data" {
   depends_on = [
     digitalocean_droplet.node,
+    digitalocean_droplet.cc,
   ]
   content = templatefile("${path.module}/templates/infra-data-json.tmpl", {
     subnet = var.vpc_subnet,
-    nodes  = local.nodes
+    nodes  = local.nodes,
+    cc = local.cc
   })
-  filename = "../${var.testnet_dir}/infra-data.json"
+  filename = "${var.testnet_dir}/infra-data.json"
 }
 
-# Run setup when infra_data file is ready.
-# resource "terraform_data" "setup" {
-#   depends_on = [
-#     local_file.infra_data,
-#   ]
-
-#   provisioner "local-exec" {
-#     command     = "./build/runner -f ${var.manifest_path} -t DO setup"
-#     working_dir = ".."
-#   }
-# }
+# Generate config files.
+resource "terraform_data" "setup" {
+  provisioner "local-exec" {
+    command     = "../target/debug/setup_e2e_testnet"
+    working_dir = ".."
+  }
+}
 
 # After a node is created and cloud-init is done, mount the NFS directory.
 resource "terraform_data" "node-done" {
@@ -61,7 +59,7 @@ resource "terraform_data" "node-done" {
     inline = [
       "cloud-init status --wait > /dev/null 2>&1",
       # mount NFS directory
-      "mount /data"
+      # "mount /data"
     ]
   }
 }

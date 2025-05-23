@@ -239,8 +239,10 @@ runcmd:
   - ufw allow from 172.16.0.0/12 to any port 13025 # nfs
   # - ufw allow in 873 # rsync
   - ufw allow in ssh
-  - ufw allow in 26657/tcp
-  - ufw allow in 26670/tcp
+  - ufw allow 3381/tcp # snapchain http
+  - ufw allow 3382/udp # snapchain gossip
+  - ufw allow 3383/tcp # snapchain rpc
+  - ufw allow 8125/tcp # snapchain statsd
   - ufw enable
   - ufw default deny incoming
   - ufw default deny outgoing
@@ -258,7 +260,7 @@ runcmd:
 # Fix journald not logging entries
   - systemctl restart systemd-journald
 # Start Docker Registry (required by the `build` command). 
-# Prometheus and Grafana services require the nodes to be initialized first.
+# Prometheus and Grafana will be started by terraform because they require the nodes to be initialized first.
   - docker compose -f /root/docker/compose.yml --profile registry up -d
 # Enable Prometheus metrics for this host
   - systemctl enable prometheus-node-exporter

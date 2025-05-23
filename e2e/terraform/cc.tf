@@ -15,6 +15,7 @@ resource "digitalocean_droplet" "cc" {
   tags     = concat(var.tags, ["cc", var.region])
   size     = var.cc_size
   ssh_keys = concat(var.ssh_keys, [digitalocean_ssh_key.cc.id])
+  vpc_uuid = digitalocean_vpc.testnet-vpc.id
   user_data = templatefile("user-data/cc-data.yaml", {
     grafana_data_sources      = filebase64("../monitoring/grafana/provisioning/datasources/prometheus.yml")
     grafana_dashboards_config = filebase64("../monitoring/grafana/provisioning/dashboards/dashboards.yaml")
@@ -61,9 +62,16 @@ resource "terraform_data" "cc-dns" {
   }
 }
 
+resource "local_file" "cc-ip" {
+  depends_on = [digitalocean_droplet.cc, terraform_data.setup]
+  content  = local.cc.ip
+  filename = "./${var.testnet_dir}/.cc-ip"
+}
+
+# Generate Prometheus config and start the monitoring services.
 resource "terraform_data" "prometheus-config" {
   triggers_replace = [
-    digitalocean_droplet.node[*]
+    digitalocean_droplet.cc.id
   ]
 
   connection {

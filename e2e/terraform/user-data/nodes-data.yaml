@@ -150,9 +150,10 @@ runcmd:
   - ufw allow out nfs
   - ufw allow out 13025
   - ufw allow in ssh
-  - ufw allow in 26657/tcp
-  - ufw allow in 26660/tcp
-  - ufw allow in 26670/tcp
+  - ufw allow 3381/tcp # snapchain http
+  - ufw allow 3382/udp # snapchain gossip
+  - ufw allow 3383/tcp # snapchain rpc
+  - ufw allow 8125/tcp # snapchain statsd
   - ufw enable
   - ufw default deny incoming
   - ufw default deny outgoing
