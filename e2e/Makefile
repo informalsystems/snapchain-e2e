@@ -1,8 +1,9 @@
 NUM_NODES ?= 3
 NODES ?= $(shell (seq -f'"node%g"' -s',' 1 $(NUM_NODES) | sed 's/,$$//'))
+IMAGE_NAME := snapchain-node
 
 build:
-	docker compose build
+	docker compose -t $(IMAGE_NAME) build
 	cargo build --bin setup_e2e_testnet
 
 setup:
@@ -31,9 +32,9 @@ sync-debug:
 	docker compose up -d node25
 
 infra-create:
-	cd terraform && terraform apply -parallelism=200 -var='testnet_dir=../nodes' -var='node_names=[$(NODES)]'
+	cd terraform && time terraform apply -parallelism=200 -var='testnet_dir=../nodes' -var='node_names=[$(NODES)]'
 
 infra-destroy:
-	cd terraform && terraform destroy -parallelism=12 -var='testnet_dir=../nodes' -var='node_names=[$(NODES)]'
+	cd terraform && time terraform destroy -parallelism=12 -var='testnet_dir=../nodes' -var='node_names=[$(NODES)]'
 
 .PHONY: build setup start stop clean perturb sync-debug

@@ -44,7 +44,7 @@ resource "terraform_data" "setup" {
 resource "terraform_data" "node-done" {
   triggers_replace = [
     digitalocean_droplet.node[count.index],
-    # terraform_data.cc-nfs.id
+    terraform_data.cc-nfs.id,
   ]
 
   count = local.testnet_size
@@ -58,8 +58,9 @@ resource "terraform_data" "node-done" {
   provisioner "remote-exec" {
     inline = [
       "cloud-init status --wait > /dev/null 2>&1",
-      # mount NFS directory
-      # "mount /data"
+      # mount NFS directory and load Docker image
+      "mount /data",
+      "docker load < /data/snapchain-image.tar"
     ]
   }
 }

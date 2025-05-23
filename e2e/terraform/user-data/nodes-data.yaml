@@ -92,8 +92,8 @@ packages:
   - ca-certificates
   - gnupg-agent
   # - software-properties-common
-  # - docker-ce
-  # - docker-ce-cli
+  - docker-ce
+  - docker-ce-cli
   # - containerd.io
   - nfs-common
 write_files:
