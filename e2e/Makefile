@@ -1,9 +1,14 @@
-NUM_NODES ?= 3
+NUM_NODES := 2
 NODES ?= $(shell (seq -f'"node%g"' -s',' 1 $(NUM_NODES) | sed 's/,$$//'))
+TESTNET_DIR := "./nodes"
+CC_IP ?= $(shell cat $(TESTNET_DIR)/.cc-ip)
+
 IMAGE_NAME := snapchain-node
 
 build:
-	docker compose -t $(IMAGE_NAME) build
+	time docker build -t $(IMAGE_NAME) --platform linux/amd64 --build-context "code=.." .
+	
+config:	
 	cargo build --bin setup_e2e_testnet
 
 setup:
@@ -38,3 +43,9 @@ infra-destroy:
 	cd terraform && time terraform destroy -parallelism=12 -var='testnet_dir=../nodes' -var='node_names=[$(NODES)]'
 
 .PHONY: build setup start stop clean perturb sync-debug
+
+image-upload:
+	docker image save $(IMAGE_NAME) -o snapchain-image.tar
+	./scripts/scp-cc.sh snapchain-image.tar 
+	./scripts/ssh-cc.sh mv /root/snapchain-image.tar /data
+	./scripts/ssh-cc.sh chown nobody:nogroup /data/snapchain-image.tar

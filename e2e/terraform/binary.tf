@@ -1,7 +1,16 @@
+# While the droplets are being created, export the Docker image.
+# The image should already exists with tag snapchain-node
+resource "terraform_data" "app-image" {
+  provisioner "local-exec" {
+    command     = "docker image save snapchain-node -o snapchain-image.tar"
+    working_dir = ".."
+  }
+}
+
 # Upload compressed binary to CC.
 resource "terraform_data" "binary-remote" {
   triggers_replace = [
-    # terraform_data.app-binary,
+    terraform_data.app-image,
     digitalocean_droplet.cc.id
   ]
 

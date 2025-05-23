@@ -2,8 +2,7 @@
 
 set -ex
 
-TESTNET_DIR=${1:-nodes}
-CC_ADDR=$(cat $TESTNET_DIR/.cc-ip)
+CC_ADDR=$(cat ./nodes/.cc-ip)
 
 # Run command from CC
 ssh_cc() {
