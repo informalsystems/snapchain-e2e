@@ -57,9 +57,9 @@ remote-stop:
 	./scripts/pssh.sh docker stop node
 
 remote-perturb:
-	./scripts/ssh.node.sh full1 docker stop node
+	./scripts/ssh-node.sh full1 docker stop node
 	sleep 30
-	./scripts/ssh.node.sh /app/start.sh
+	./scripts/ssh-node.sh full1 /app/start.sh
 
 
 .PHONY: remote-deploy remote-destroy remote-start remote-stop
