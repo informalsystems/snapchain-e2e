@@ -141,10 +141,7 @@ write_files:
       #!/bin/sh
       docker run --rm -it --detach \
         --name node \
-        -p 3381:3381/tcp \
-        -p 3383:3383/tcp \
-        -p 3483:3483 \
-        -p 50051:50051/udp \
+        --network host \
         --mount type=bind,source=/app/config,target=/app/config \
         --mount type=bind,source=/app/data,target=/app/data \
         --cap-add=NET_ADMIN \
@@ -165,10 +162,6 @@ runcmd:
   - ufw allow out nfs
   - ufw allow out 13025
   - ufw allow in ssh
-  - ufw allow 3381/tcp # snapchain http
-  - ufw allow 3382/udp # snapchain gossip
-  - ufw allow 3383/tcp # snapchain rpc
-  - ufw allow 8125/tcp # snapchain statsd
   - ufw enable
   - ufw default deny incoming
   - ufw default deny outgoing

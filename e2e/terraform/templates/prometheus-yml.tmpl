@@ -8,5 +8,5 @@ scrape_configs:
 %{~ for i, n in nodes }
   - job_name: '${n.name}'
     static_configs:
-      - targets: ['${n.ip}:26660']
+      - targets: ['${n.internal_ip}:9000']
 %{~ endfor }
