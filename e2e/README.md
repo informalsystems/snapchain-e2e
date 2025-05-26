@@ -51,12 +51,10 @@ The testnet will be deployed to DigitalOcean.
     ```
     This command creates an image with the tag `snapchain-node`.
 
-6. Build the setup binary to create to config files:
-    ```sh
-    cargo build --bin setup_remote_testnet
-    ```
-
 ### Run the testnet
+
+6. Define the size of the testnet by setting the variables `NUM_VALIDATORS` and `NUM_FULL_NODES` in
+   `Makefile`.
 
 7. Deploy the nodes, including their config files:
     ```sh

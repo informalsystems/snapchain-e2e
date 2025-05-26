@@ -63,7 +63,7 @@ resource "local_file" "infra_data" {
 resource "terraform_data" "config-gen" {
   depends_on = [ local_file.infra_data ]
   provisioner "local-exec" {
-    command     = "../target/debug/setup_remote_testnet --infra-path ${var.testnet_dir}/infra-data.json"
+    command     = "cargo build --bin setup_remote_testnet && ../target/debug/setup_remote_testnet --infra-path ${var.testnet_dir}/infra-data.json --num-shards=${var.num_shards} --first-full-nodes=${var.first_full_nodes}"
     working_dir = ".."
   }
 }
