@@ -12,7 +12,7 @@ struct Args {
     infra_path: String,
 
     /// Delay between blocks (e.g. "250ms")
-    #[arg(long, value_parser = parse_duration, default_value = "250ms")]
+    #[arg(long, value_parser = parse_duration, default_value = "1000ms")]
     block_time: Duration,
 
     #[arg(long, default_value = "")]
