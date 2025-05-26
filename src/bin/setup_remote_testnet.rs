@@ -229,8 +229,8 @@ aws_secret_access_key = "{aws_secret_access_key}"
             validator_idx = (validator_idx % infra.num_validators) + 1;
         }
 
-        // Connect to 2 other full nodes: the next two in id order (wrapping around)
-        for _ in 1..=2 {
+        // Connect to 10 other full nodes: the next ones in id order (wrapping around)
+        for _ in 0..10 {
             if full_node_idx != i {
                 let node = infra
                     .instances
