@@ -2,6 +2,16 @@ variable "testnet_dir" {
   type = string
 }
 
+variable "num_shards" {
+  type = number
+  default = 1
+}
+
+variable "first_full_nodes" {
+  type = number
+  default = 20
+}
+
 variable "vpc_subnet" {
   type = string
   # TODO: remove default by auto-selecting the first available range

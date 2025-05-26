@@ -45,6 +45,13 @@ struct Args {
 
     #[arg(long, default_value = "1")]
     num_shards: u32,
+
+    #[arg(
+        long,
+        default_value = "20",
+        help = "Number of full nodes that will be initially connected to validators"
+    )]
+    first_full_nodes: u64,
     // #[arg(long, default_value = "5")]
     // num_validators: u32,
 
@@ -217,18 +224,19 @@ aws_secret_access_key = "{aws_secret_access_key}"
         // Full nodes are connected to 2 validator and 2 full nodes
         let mut other_nodes_addresses = Vec::new();
 
-        // Connect to 2 validators in round robin based on full node id
-        for _ in 0..2 {
-            let val = infra
-                .instances
-                .get(format!("val{validator_idx}").as_str())
-                .expect("validator index out of bounds");
-            if !other_nodes_addresses.contains(&val.private_ip) {
-                other_nodes_addresses.push(val.private_ip.clone());
+        // Connect to 2 validators in round robin based on full node id, only for first_full_nodes
+        if i < args.first_full_nodes {
+            for _ in 0..2 {
+                let val = infra
+                    .instances
+                    .get(format!("val{validator_idx}").as_str())
+                    .expect("validator index out of bounds");
+                if !other_nodes_addresses.contains(&val.private_ip) {
+                    other_nodes_addresses.push(val.private_ip.clone());
+                }
+                validator_idx = (validator_idx % infra.num_validators) + 1;
             }
-            validator_idx = (validator_idx % infra.num_validators) + 1;
         }
-
         // Connect to 10 other full nodes: the next ones in id order (wrapping around)
         for _ in 0..10 {
             if full_node_idx != i {
