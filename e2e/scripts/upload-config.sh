@@ -10,5 +10,8 @@ echo NODE_NAMES=$NODE_NAMES
 for NODE in "${NODE_NAMES[@]}"
 do
     NODE_IP=$(cat ./nodes/infra-data.json | jq -r .instances.${NODE}.public_ip)
-    scp -C $SSH_OPTS ./nodes/$NODE/config.toml root@${NODE_IP}:/app/config/config.toml
+    scp -C $SSH_OPTS ./nodes/$NODE/config.toml root@${NODE_IP}:/app/config/config.toml &
 done
+
+# Remove app data
+./scripts/pssh.sh rm -rdf /app/data/.rocks
