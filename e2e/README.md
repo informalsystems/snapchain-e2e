@@ -43,39 +43,58 @@ The testnet will be deployed to DigitalOcean.
     make terraform-init
     ```
 
-### Preparation before deploying
+### Preparation required for deploying nodes
 
-Before deploying, build the image locally:
-```
-make build
-```
-This command builds an image with tag `snapchain-node`.
+5. Before creating the remote nodes, the Docker image should exist locally. Build it with:
+    ```sh
+    make build
+    ```
+    This command creates an image with the tag `snapchain-node`.
 
-Build the setup binary:
-```
-cargo build --bin setup_remote_testnet
-```
+6. Build the setup binary to create to config files:
+    ```sh
+    cargo build --bin setup_remote_testnet
+    ```
 
 ### Run the testnet
 
-Deploy nodes:
-```
-make remote-create
-```
+7. Deploy the nodes, including their config files:
+    ```sh
+    make remote-create
+    ```
 
-When you finish with the tests, don't forget to destroy the nodes!
-```
-make remote-destroy
-```
+    When you finish with the tests, don't forget to destroy the nodes!
+    ```sh
+    make remote-destroy
+    ```
 
-Start/stop all nodes in the testnet:
-```
-make remote-start
-make remote-stop
-```
+8. Start/stop all nodes in the testnet:
+    ```sh
+    make remote-start
+    make remote-stop
+    ```
 
-See logs of a node:
-```
-./scripts/ssh-node.sh val1 docker logs -f node
-```
-Validator nodes are named `val1`, `val2`, ... and full nodes are named `full1`, `full2`, ...
+### Optionally 
+
+9. See the logs of a node:
+    ```sh
+    ./scripts/ssh-node.sh val1 docker logs -f node
+    ```
+    Validator nodes are named `val1`, `val2`, ... and full nodes are named `full1`, `full2`, ...
+
+10. Re-upload all config files:
+    ```sh
+    ./scripts/upload-config.sh
+    ```
+
+11. Perturb multiple full nodes:
+    ```sh
+    ./scripts/perturb.sh
+    ```
+
+### Finally
+
+99. Don't forget to destroy the testnet:
+    ```
+    make remote-destroy
+    ```
