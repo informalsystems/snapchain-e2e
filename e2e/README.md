@@ -1,7 +1,8 @@
 # E2E testnet
 
-## How to run the testnet
+## Local testnet
 
+Run the testnet with:
 ```sh
 make build
 make setup
@@ -11,8 +12,9 @@ make stop
 make clean
 ```
 
-## Deploy to DigitalOcean
+## Remote testnet
 
+The testnet will be deployed to DigitalOcean.
 
 ### Setup DigitalOcean in Terraform
 
@@ -41,24 +43,39 @@ make clean
     make terraform-init
     ```
 
-### How to deploy
+### Preparation before deploying
 
-Build Docker image (with tag `snapchain-node`):
+Before deploying, build the image locally:
 ```
 make build
 ```
+This command builds an image with tag `snapchain-node`.
 
-Export image as file:
+Build the setup binary:
 ```
-docker image save snapchain-node -o snapchain-image.tar
+cargo build --bin setup_remote_testnet
 ```
+
+### Run the testnet
 
 Deploy nodes:
 ```
-make infra-create
+make remote-create
 ```
 
-When you finish with the test, don't forget to:
+When you finish with the tests, don't forget to destroy the nodes!
 ```
-make infra-destroy
+make remote-destroy
 ```
+
+Start/stop all nodes in the testnet:
+```
+make remote-start
+make remote-stop
+```
+
+See logs of a node:
+```
+./scripts/ssh-node.sh val1 docker logs -f node
+```
+Validator nodes are named `val1`, `val2`, ... and full nodes are named `full1`, `full2`, ...

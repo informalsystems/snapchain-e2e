@@ -155,8 +155,6 @@ write_files:
             - 0.0.0.0:80:5000
           volumes:
             - registry:/var/lib/registry
-          environment:
-            REGISTRY_HTTP_SECRET: siSRSRTHSRTHSERGehrgjsoiejrg45625623452345isejrgisejrgsergserg
           restart: on-failure
         prometheus:
           profiles: ["monitoring"]

@@ -3,7 +3,7 @@
 set -ex
 
 NODE_INDEX=$1
-NODE_IP=$(cat ./nodes/infra-data.json | jq -r .instances.node${NODE_INDEX}.ext_ip_address)
+NODE_IP=$(cat ./nodes/infra-data.json | jq -r .instances.${NODE_INDEX}.public_ip)
 
 # TODO: check first argument is valid; check json file exists
 

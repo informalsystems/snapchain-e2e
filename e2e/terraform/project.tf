@@ -1,10 +1,7 @@
 resource "digitalocean_project" "main-testnet" {
   name        = local.do_project_name
   description = "A project to test the ${var.project_name} codebase."
-  resources = concat([
-    for node in local.nodes :
-    node.urn
-  ], [digitalocean_droplet.cc.urn])
+  resources = concat([for node in digitalocean_droplet.nodes : node.urn], [digitalocean_droplet.cc.urn])
 }
 
 resource "digitalocean_vpc" "testnet-vpc" {

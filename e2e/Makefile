@@ -36,16 +36,21 @@ sync-debug:
 	sleep 60
 	docker compose up -d node25
 
-infra-create:
-	cd terraform && time terraform apply -parallelism=200 -var='testnet_dir=../nodes' -var='node_names=[$(NODES)]'
+.PHONY: build setup start stop clean perturb sync-debug 
 
-infra-destroy:
-	cd terraform && time terraform destroy -parallelism=12 -var='testnet_dir=../nodes' -var='node_names=[$(NODES)]'
+remote-create:
+	cd terraform && time terraform apply -parallelism=200 \
+		-var='testnet_dir=nodes' -var='validator_names=[$(VALIDATORS)]' -var='full_node_names=[$(FULL_NODES)]'
 
-.PHONY: build setup start stop clean perturb sync-debug
+remote-destroy:
+	cd terraform && time terraform destroy -parallelism=200 \
+		-var='testnet_dir=nodes' -var='validator_names=[$(VALIDATORS)]' -var='full_node_names=[$(FULL_NODES)]'
 
-image-upload:
-	docker image save $(IMAGE_NAME) -o snapchain-image.tar
-	./scripts/scp-cc.sh snapchain-image.tar 
-	./scripts/ssh-cc.sh mv /root/snapchain-image.tar /data
-	./scripts/ssh-cc.sh chown nobody:nogroup /data/snapchain-image.tar
+remote-start:
+	./scripts/pssh.sh /app/start.sh
+
+remote-stop:
+	./scripts/pssh.sh docker stop node
+
+
+.PHONY: remote-deploy remote-destroy remote-start remote-stop

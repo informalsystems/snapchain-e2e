@@ -21,7 +21,12 @@ variable "project_name" {
   default = "Snapchain"
 }
 
-variable "node_names" {
+variable "validator_names" {
+  type    = list(string)
+  default = []
+}
+
+variable "full_node_names" {
   type    = list(string)
   default = []
 }
@@ -80,14 +85,16 @@ variable "ssh_timeout" {
 
 locals {
   do_project_name = lower("${var.project_name}-testnet")
-  testnet_size    = length(var.node_names)
+  num_validators = length(var.validator_names)
+  num_full_nodes = length(var.full_node_names)
+  node_names = concat(var.validator_names, var.full_node_names)
+  num_nodes = length(var.validator_names) + length(var.full_node_names)
   nodes = [
-    for node in digitalocean_droplet.node :
+    for node in digitalocean_droplet.nodes :
     {
       name        = node.name,
-      urn         = node.urn,
       ip          = node.ipv4_address,
-      internal_ip = node.ipv4_address_private
+      internal_ip = node.ipv4_address_private,
     }
   ]
   cc = {

@@ -45,13 +45,13 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry cargo build --release
 
 #################################################################################
 
-FROM alpine:latest
-RUN apk add --no-cache iproute2
+FROM ubuntu:24.04
 
 WORKDIR /app
 COPY --from=builder /usr/src/app/src/proto /app/proto
 COPY --from=builder /usr/src/app/target/release/snapchain /app/
 
+RUN apt-get update && apt-get install -y iproute2
 COPY <<'EOS' /usr/local/bin/entrypoint.sh
 #!/bin/sh
 set -e
@@ -62,6 +62,6 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 
 ENV RUSTFLAGS="-Awarnings"
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-CMD ["/app/snapchain", "--config-path", "/app/config.toml"]
+CMD ["/app/snapchain", "--config-path", "/app/config/config.toml"]
 
 EXPOSE 3381 3382 3383 3483 50051

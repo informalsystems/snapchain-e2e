@@ -38,7 +38,7 @@ resource "digitalocean_droplet" "cc" {
 # Once cloud-init is done on CC, set up and start a DNS server.
 resource "terraform_data" "cc-dns" {
   triggers_replace = [
-    digitalocean_droplet.node,
+    digitalocean_droplet.nodes,
     digitalocean_droplet.cc.id
   ]
 
@@ -63,9 +63,9 @@ resource "terraform_data" "cc-dns" {
 }
 
 resource "local_file" "cc-ip" {
-  depends_on = [digitalocean_droplet.cc, terraform_data.setup]
+  depends_on = [digitalocean_droplet.cc]
   content  = local.cc.ip
-  filename = "./${var.testnet_dir}/.cc-ip"
+  filename = "../${var.testnet_dir}/.cc-ip"
 }
 
 # Generate Prometheus config and start the monitoring services.

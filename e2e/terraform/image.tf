@@ -7,8 +7,8 @@ resource "terraform_data" "app-image" {
   }
 }
 
-# Upload compressed binary to CC.
-resource "terraform_data" "binary-remote" {
+# Upload compressed Docker image to CC.
+resource "terraform_data" "image-remote" {
   triggers_replace = [
     terraform_data.app-image,
     digitalocean_droplet.cc.id
@@ -31,7 +31,7 @@ resource "terraform_data" "cc-nfs" {
   triggers_replace = [
     digitalocean_droplet.cc.id,
     # terraform_data.cc-done.id,
-    terraform_data.binary-remote
+    terraform_data.image-remote
   ]
 
   connection {
@@ -42,14 +42,14 @@ resource "terraform_data" "cc-nfs" {
 
   provisioner "remote-exec" {
     inline = [
-      # Block until cloud-init completes.
+      # Block until cloud-init completes
       "cloud-init status --wait > /dev/null 2>&1",
-      # Set up NFS.
+      # Set up NFS
       "mkdir /data",
       "chown nobody:nogroup /data",
       "systemctl start nfs-kernel-server",
       "systemctl enable nfs-kernel-server",
-      # Now that the NFS directory is ready, put the file in it.
+      # Make image available in NFS directory
       "mv /root/snapchain-image.tar /data",
       "chown nobody:nogroup /data/snapchain-image.tar",
     ]

@@ -136,6 +136,21 @@ write_files:
       LimitNOFILE=4096
       [Install]
       WantedBy=multi-user.target
+  - path: /app/start.sh
+    content: |
+      #!/bin/sh
+      docker run --rm -it --detach \
+        --name node \
+        -p 3381:3381/tcp \
+        -p 3383:3383/tcp \
+        -p 3483:3483 \
+        -p 50051:50051/udp \
+        --mount type=bind,source=/app/config,target=/app/config \
+        --mount type=bind,source=/app/data,target=/app/data \
+        --cap-add=NET_ADMIN \
+        --env RUST_BACKTRACE=full \
+        snapchain-node \
+        /app/snapchain --config-path /app/config/config.toml
 runcmd:
 # Set up firewall
   - ufw allow in from 10.0.0.0/8
@@ -168,8 +183,11 @@ runcmd:
 # Start prometheus node exporter
   - systemctl start prometheus-node-exporter
   - systemctl enable prometheus-node-exporter
-# Create app's home directory
+# Create app's home directories
   - mkdir /app
+  - mkdir /app/config
+  - mkdir /app/data
+  - chmod +x /app/start.sh
 # Set up NFS share, (Mounting will happen post-install)
   - mkdir /data
   - chown nobody:nogroup /data
