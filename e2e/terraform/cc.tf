@@ -35,32 +35,32 @@ resource "digitalocean_droplet" "cc" {
   }
 }
 
-# Once cloud-init is done on CC, set up and start a DNS server.
-resource "terraform_data" "cc-dns" {
-  triggers_replace = [
-    digitalocean_droplet.nodes,
-    digitalocean_droplet.cc.id
-  ]
+# # Once cloud-init is done on CC, set up and start a DNS server.
+# resource "terraform_data" "cc-dns" {
+#   triggers_replace = [
+#     digitalocean_droplet.nodes,
+#     digitalocean_droplet.cc.id
+#   ]
 
-  connection {
-    host        = digitalocean_droplet.cc.ipv4_address
-    timeout     = var.ssh_timeout
-    private_key = tls_private_key.ssh.private_key_openssh
-  }
+#   connection {
+#     host        = digitalocean_droplet.cc.ipv4_address
+#     timeout     = var.ssh_timeout
+#     private_key = tls_private_key.ssh.private_key_openssh
+#   }
 
-  provisioner "file" {
-    content     = templatefile("templates/hosts.tmpl", { nodes = local.nodes, cc = local.cc })
-    destination = "/etc/hosts"
-  }
+#   provisioner "file" {
+#     content     = templatefile("templates/hosts.tmpl", { nodes = local.nodes, cc = local.cc })
+#     destination = "/etc/hosts"
+#   }
 
-  provisioner "remote-exec" {
-    inline = [
-      # "cloud-init status --wait  > /dev/null 2>&1",
-      "while [ ! -f /etc/done ]; do sleep 1; done",
-      "systemctl reload-or-restart dnsmasq"
-    ]
-  }
-}
+#   provisioner "remote-exec" {
+#     inline = [
+#       # "cloud-init status --wait  > /dev/null 2>&1",
+#       "while [ ! -f /etc/done ]; do sleep 1; done",
+#       "systemctl reload-or-restart dnsmasq"
+#     ]
+#   }
+# }
 
 resource "local_file" "cc-ip" {
   depends_on = [digitalocean_droplet.cc]

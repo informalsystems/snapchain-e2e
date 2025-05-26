@@ -81,13 +81,9 @@ packages:
   - software-properties-common
   - docker-ce
   - docker-ce-cli
-  - containerd.io
   - nfs-kernel-server
-  - dnsmasq
-  # - pssh
-  # - rsync
+  # - dnsmasq
   - pwgen
-  # - kitty-terminfo
 write_files:
   - path: /etc/docker/daemon.json
     content: |
@@ -110,34 +106,34 @@ write_files:
       # (insecure) read-only access to the world
       /data 0.0.0.0/1(ro,sync,no_subtree_check,root_squash)
       /data 128.0.0.0/1(ro,sync,no_subtree_check,root_squash)
-  - path: /etc/systemd/resolved.conf.d/1-dnsmasq.conf
-    content: |
-      [Resolve]
-      DNS=127.0.0.1
-      DNSStubListener=no
-  - path: /etc/dnsmasq.d/servers.conf
-    content: |
-      server=1.0.0.1
-      server=1.1.1.1
-      bogus-priv
-      expand-hosts
-      domain=testnet
-      cache-size=1000
-      # (insecure) allow queries from the world
-      interface=eth0
-  - path: /etc/nsswitch.conf
-    content: |
-      passwd:         files
-      group:          files
-      shadow:         files
-      gshadow:        files
-      hosts:          dns
-      networks:       files
-      protocols:      db files
-      services:       db files
-      ethers:         db files
-      rpc:            db files
-      netgroup:       nis
+  # - path: /etc/systemd/resolved.conf.d/1-dnsmasq.conf
+  #   content: |
+  #     [Resolve]
+  #     DNS=127.0.0.1
+  #     DNSStubListener=no
+  # - path: /etc/dnsmasq.d/servers.conf
+  #   content: |
+  #     server=1.0.0.1
+  #     server=1.1.1.1
+  #     bogus-priv
+  #     expand-hosts
+  #     domain=testnet
+  #     cache-size=1000
+  #     # (insecure) allow queries from the world
+  #     interface=eth0
+  # - path: /etc/nsswitch.conf
+  #   content: |
+  #     passwd:         files
+  #     group:          files
+  #     shadow:         files
+  #     gshadow:        files
+  #     hosts:          dns
+  #     networks:       files
+  #     protocols:      db files
+  #     services:       db files
+  #     ethers:         db files
+  #     rpc:            db files
+  #     netgroup:       nis
   - path: /root/docker/grafana_prometheus_source.yml
     encoding: b64
     content: ${grafana_data_sources}

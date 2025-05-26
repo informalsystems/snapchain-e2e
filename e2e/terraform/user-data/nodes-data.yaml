@@ -97,25 +97,25 @@ packages:
   # - containerd.io
   - nfs-common
 write_files:
-# Force systemd-resolved to use custom DNS server
-  - path: /etc/systemd/resolved.conf.d/DigitalOcean.conf
-    content: |
-      [Resolve]
-      DNS=${cc.ip}
-# Force resolv to use DNS for host resolution
-  - path: /etc/nsswitch.conf
-    content: |
-      passwd:         files
-      group:          files
-      shadow:         files
-      gshadow:        files
-      hosts:          dns
-      networks:       files
-      protocols:      db files
-      services:       db files
-      ethers:         db files
-      rpc:            db files
-      netgroup:       nis
+# # Force systemd-resolved to use custom DNS server
+#   - path: /etc/systemd/resolved.conf.d/DigitalOcean.conf
+#     content: |
+#       [Resolve]
+#       DNS=${cc.ip}
+# # Force resolv to use DNS for host resolution
+#   - path: /etc/nsswitch.conf
+#     content: |
+#       passwd:         files
+#       group:          files
+#       shadow:         files
+#       gshadow:        files
+#       hosts:          dns
+#       networks:       files
+#       protocols:      db files
+#       services:       db files
+#       ethers:         db files
+#       rpc:            db files
+#       netgroup:       nis
 # Set server ID
   - path: /etc/id
     content: |
@@ -157,7 +157,7 @@ runcmd:
   - ufw allow out from 172.16.0.0/12
   - ufw allow out from 196.168.0.0/16
   - ufw allow out proto tcp to any port 80,443
-  - ufw allow out dns
+  # - ufw allow out dns
   - ufw allow out ntp
   - ufw allow out nfs
   - ufw allow out 13025
@@ -166,8 +166,8 @@ runcmd:
   - ufw default deny incoming
   - ufw default deny outgoing
   - systemctl daemon-reload
-# Update resolv.conf with forced DNS server
-  - systemctl restart systemd-resolved
+# # Update resolv.conf with forced DNS server
+#   - systemctl restart systemd-resolved
 # Start docker
   - systemctl start docker
   - systemctl enable docker
