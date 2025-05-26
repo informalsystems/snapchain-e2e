@@ -1,5 +1,8 @@
-NUM_NODES := 2
-NODES ?= $(shell (seq -f'"node%g"' -s',' 1 $(NUM_NODES) | sed 's/,$$//'))
+NUM_VALIDATORS := 2
+NUM_FULL_NODES := 2
+NUM_NODES := $(shell expr $(NUM_VALIDATORS) + $(NUM_FULL_NODES))
+VALIDATORS ?= $(shell (seq -f'"val%g"' -s',' 1 $(NUM_VALIDATORS) | sed 's/,$$//'))
+FULL_NODES ?= $(shell (seq -f'"full%g"' -s',' 1 $(NUM_FULL_NODES) | sed 's/,$$//'))
 TESTNET_DIR := "./nodes"
 CC_IP ?= $(shell cat $(TESTNET_DIR)/.cc-ip)
 
@@ -8,8 +11,9 @@ IMAGE_NAME := snapchain-node
 build:
 	time docker build -t $(IMAGE_NAME) --platform linux/amd64 --build-context "code=.." .
 	
-config:	
+build-config:	
 	cargo build --bin setup_e2e_testnet
+	cargo build --bin setup_remote_testnet
 
 setup:
 	../target/debug/setup_e2e_testnet
