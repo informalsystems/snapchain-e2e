@@ -381,7 +381,7 @@ services:
       GF_ANALYTICS_CHECK_FOR_UPDATES: false
       GF_ANALYTICS_FEEDBACK_LINKS_ENABLED: false
       GF_SECURITY_DISABLE_GRAVATAR: true
-      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/main.json
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards-data/main.json
       GF_USERS_DEFAULT_THEME: system
       GF_USERS_EDITORS_CAN_ADMIN: true
       GF_AUTH_ANONYMOUS_ENABLED: true

@@ -1,0 +1,17 @@
+{
+	"provider": "digital-ocean",
+	"network": "${subnet}",
+    "num_validators": ${num_validators},
+    "num_full_nodes": ${num_full_nodes},
+    "${cc.name}": {
+        "public_ip": "${cc.ip}",
+        "private_ip": "${cc.internal_ip}"
+    },
+	"instances": ${jsonencode({
+        for n in nodes:
+            "${n.name}" => {
+                "public_ip": "${n.ip}",
+                "private_ip": "${n.internal_ip}"
+            }
+        })}
+}
