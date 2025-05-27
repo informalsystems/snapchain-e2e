@@ -68,7 +68,7 @@ impl Default for Config {
             bootstrap_peers: "".to_string(),
             contact_info_interval: Duration::from_secs(300),
             bootstrap_reconnect_interval: Duration::from_secs(30),
-            enable_autodiscovery: false,
+            enable_autodiscovery: true,
         }
     }
 }
