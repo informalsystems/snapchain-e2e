@@ -8,6 +8,7 @@ FULL_NODES ?= $(shell (seq -f'"full%g"' -s',' 1 $(NUM_FULL_NODES) | sed 's/,$$//
 TESTNET_DIR := nodes
 CC_IP ?= $(shell cat ./$(TESTNET_DIR)/.cc-ip)
 TERRAFORM_VARS := -var='testnet_dir=$(TESTNET_DIR)' -var='validator_names=[$(VALIDATORS)]' -var='full_node_names=[$(FULL_NODES)]' -var='num_shards=$(NUM_SHARDS)' -var='first_full_nodes=$(FIRST_FULL_NODES)'
+BANDWIDTH := "1gbit"
 
 IMAGE_NAME := snapchain-node
 
@@ -51,6 +52,9 @@ remote-create:
 
 remote-destroy:
 	cd terraform && time terraform destroy -parallelism=200 $(TERRAFORM_VARS)
+
+remote-apply-tc:
+	./scripts/apply-tc.sh $(BANDWIDTH)
 
 remote-start:
 	./scripts/pssh.sh /app/start.sh
