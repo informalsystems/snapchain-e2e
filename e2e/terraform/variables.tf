@@ -3,13 +3,18 @@ variable "testnet_dir" {
 }
 
 variable "num_shards" {
-  type = number
+  type    = number
   default = 1
 }
 
 variable "first_full_nodes" {
-  type = number
+  type    = number
   default = 20
+}
+
+variable "bandwidth" {
+  type    = string
+  default = "1gbit"
 }
 
 variable "vpc_subnet" {
@@ -95,10 +100,10 @@ variable "ssh_timeout" {
 
 locals {
   do_project_name = lower("${var.project_name}-testnet")
-  num_validators = length(var.validator_names)
-  num_full_nodes = length(var.full_node_names)
-  node_names = concat(var.validator_names, var.full_node_names)
-  num_nodes = length(var.validator_names) + length(var.full_node_names)
+  num_validators  = length(var.validator_names)
+  num_full_nodes  = length(var.full_node_names)
+  node_names      = concat(var.validator_names, var.full_node_names)
+  num_nodes       = length(var.validator_names) + length(var.full_node_names)
   nodes = [
     for node in digitalocean_droplet.nodes :
     {

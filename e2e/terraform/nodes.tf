@@ -37,13 +37,12 @@ resource "terraform_data" "nodes_done" {
     inline = [
       "cloud-init status --wait > /dev/null 2>&1",
       "mount /data",
-      "docker load < /data/snapchain-image.tar",
-      "mkdir -p /app/config"
+      "docker load < /data/snapchain-image.tar"
     ]
   }
 }
 
-# Create file with data on all infra created.
+# Create file with data once all nodes are created.
 resource "local_file" "infra_data" {
   depends_on = [
     digitalocean_droplet.cc,
@@ -60,19 +59,22 @@ resource "local_file" "infra_data" {
 }
 
 # Generate config files using infra data.
-resource "terraform_data" "config-gen" {
+resource "terraform_data" "config_gen" {
   depends_on = [ local_file.infra_data ]
   provisioner "local-exec" {
-    command     = "cargo build --bin setup_remote_testnet && ../target/debug/setup_remote_testnet --infra-path ${var.testnet_dir}/infra-data.json --num-shards=${var.num_shards} --first-full-nodes=${var.first_full_nodes}"
+    command     = <<-EOT
+      cargo build --bin setup_remote_testnet
+      ../target/debug/setup_remote_testnet --infra-path ${var.testnet_dir}/infra-data.json --num-shards=${var.num_shards} --first-full-nodes=${var.first_full_nodes}
+      ./scripts/tc/generate-tc-scripts.py scripts/tc/latencies.csv nodes/infra-data.json ${var.bandwidth}
+    EOT
     working_dir = ".."
   }
 }
 
-# Upload config files to corresponding nodes.
-resource "terraform_data" "upload-config" {
+# Upload config files to corresponding nodes and set up latency emulation.
+resource "terraform_data" "upload_config" {
   triggers_replace = [
-    terraform_data.config-gen,
-    # digitalocean_droplet.nodes[count.index].id,
+    terraform_data.config_gen,
     terraform_data.nodes_done,
   ]
 
@@ -85,7 +87,15 @@ resource "terraform_data" "upload-config" {
   }
 
   provisioner "file" {
-    source      = "../${var.testnet_dir}/${digitalocean_droplet.nodes[count.index].name}/config.toml"
-    destination = "/app/config/config.toml"
+    source      = "../${var.testnet_dir}/${digitalocean_droplet.nodes[count.index].name}/"
+    destination = "/app/config"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "while [ ! -f /app/config/tc-setup.sh ]; do sleep 1; done",
+      "chmod +x /app/config/tc-setup.sh",
+      "/app/config/tc-setup.sh"
+    ]
   }
 }

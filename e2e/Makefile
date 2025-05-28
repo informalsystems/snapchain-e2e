@@ -1,14 +1,21 @@
+# Testnet parameters
 NUM_VALIDATORS := 2
 NUM_FULL_NODES := 2
 NUM_SHARDS := 2
 FIRST_FULL_NODES := 50
+BANDWIDTH := 1gbit
+
 NUM_NODES := $(shell expr $(NUM_VALIDATORS) + $(NUM_FULL_NODES))
 VALIDATORS ?= $(shell (seq -f'"val%g"' -s',' 1 $(NUM_VALIDATORS) | sed 's/,$$//'))
 FULL_NODES ?= $(shell (seq -f'"full%g"' -s',' 1 $(NUM_FULL_NODES) | sed 's/,$$//'))
 TESTNET_DIR := nodes
 CC_IP ?= $(shell cat ./$(TESTNET_DIR)/.cc-ip)
-TERRAFORM_VARS := -var='testnet_dir=$(TESTNET_DIR)' -var='validator_names=[$(VALIDATORS)]' -var='full_node_names=[$(FULL_NODES)]' -var='num_shards=$(NUM_SHARDS)' -var='first_full_nodes=$(FIRST_FULL_NODES)'
-
+TERRAFORM_VARS := -var='testnet_dir=$(TESTNET_DIR)' \
+	-var='validator_names=[$(VALIDATORS)]' \
+	-var='full_node_names=[$(FULL_NODES)]' \
+	-var='num_shards=$(NUM_SHARDS)' \
+	-var='first_full_nodes=$(FIRST_FULL_NODES)' \
+	-var='bandwidth=$(BANDWIDTH)'
 IMAGE_NAME := snapchain-node
 
 build:
@@ -63,5 +70,4 @@ remote-perturb:
 	sleep 30
 	./scripts/ssh-node.sh full1 /app/start.sh
 
-
-.PHONY: remote-deploy remote-destroy remote-start remote-stop
+.PHONY: remote-deploy remote-destroy remote-start remote-stop remote-perturb
