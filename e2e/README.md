@@ -98,6 +98,11 @@ The testnet will be deployed to DigitalOcean.
     ```
     Port 3381 is for RPC and port 3383 is for HTTP.
 
+13. Reset the app state in all nodes, to be able to run multiple experiments without destroying the nodes.
+    ```sh
+    make remote-reset-states
+    ```
+
 ### Finally
 
 99. Don't forget to destroy the testnet:
