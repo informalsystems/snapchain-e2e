@@ -85,10 +85,18 @@ The testnet will be deployed to DigitalOcean.
     ./scripts/upload-config.sh
     ```
 
-11. Perturb multiple full nodes:
+11. Take down and restart multiple full nodes simultaneously:
     ```sh
     ./scripts/perturb.sh
     ```
+
+12. Temporarily disable a port in a given node:
+    ```sh
+    ./scripts/port-disable.sh val1 3381
+    sleep 60
+    ./scripts/port-enable.sh val1 3381
+    ```
+    Port 3381 is for RPC and port 3383 is for HTTP.
 
 ### Finally
 
