@@ -33,7 +33,7 @@ def execute_command(cmd):
     subprocess.run(cmd, shell=True, check=True)
 
 
-def build_tc_commands(header, matrix, ips, local_ip, bandwidth="1gbit"):
+def build_tc_commands(header, matrix, ips, local_ip, bandwidth):
     commands = []
     num_zones = len(header)
     local_index = ips.index(local_ip)
@@ -88,7 +88,7 @@ def main():
     infra_data, ips = read_infra_data(infra_data_file)
 
     for instance, ip in infra_data.items():
-        commands = build_tc_commands(header, matrix, ips, ip)
+        commands = build_tc_commands(header, matrix, ips, ip, bandwidth)
         with open(f"nodes/{instance}/tc-setup.sh", "w") as f:
             f.write("#!/bin/bash\n")
             for cmd in commands:

@@ -12,6 +12,11 @@ variable "first_full_nodes" {
   default = 20
 }
 
+variable "bandwidth" {
+  type    = string
+  default = "1gbit"
+}
+
 variable "vpc_subnet" {
   type = string
   # TODO: remove default by auto-selecting the first available range
