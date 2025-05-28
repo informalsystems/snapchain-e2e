@@ -17,8 +17,9 @@ resource "digitalocean_droplet" "cc" {
   ssh_keys = concat(var.ssh_keys, [digitalocean_ssh_key.cc.id])
   vpc_uuid = digitalocean_vpc.testnet-vpc.id
   user_data = templatefile("user-data/cc-data.yaml", {
-    grafana_data_sources      = filebase64("../monitoring/grafana/provisioning/datasources/prometheus.yml")
-    grafana_dashboards_config = filebase64("../monitoring/grafana/provisioning/dashboards/dashboards.yaml")
+    grafana_datasource_prometheus = filebase64("../monitoring/grafana/provisioning/datasources/prometheus.yml")
+    grafana_datasource_graphite   = filebase64("../monitoring/grafana/provisioning/datasources/graphite.yml")
+    grafana_dashboards_config     = filebase64("../monitoring/grafana/provisioning/dashboards/dashboards.yaml")
   })
   connection {
     host        = digitalocean_droplet.cc.ipv4_address
