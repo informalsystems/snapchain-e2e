@@ -52,17 +52,9 @@ COPY --from=builder /usr/src/app/src/proto /app/proto
 COPY --from=builder /usr/src/app/target/release/snapchain /app/
 
 RUN apt-get update && apt-get install -y iproute2
-COPY <<'EOS' /usr/local/bin/entrypoint.sh
-#!/bin/sh
-set -e
-tc qdisc add dev eth0 root netem delay 100ms 10ms distribution normal || true
-exec "$@"
-EOS
-RUN chmod +x /usr/local/bin/entrypoint.sh
 
 ENV RUSTFLAGS="-Awarnings"
 ENV RUST_LOG=debug
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["/app/snapchain", "--config-path", "/app/config/config.toml"]
 
 EXPOSE 3381 3382 3383 3483 50051

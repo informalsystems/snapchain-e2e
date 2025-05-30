@@ -8,7 +8,7 @@ use toml::Value;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    #[arg(long, default_value = "./testnet/infra-data.json")]
+    #[arg(long, default_value = "./nodes/infra-data.json")]
     infra_path: String,
 
     /// Delay between blocks (e.g. "250ms")
@@ -43,7 +43,7 @@ struct Args {
     #[arg(long, default_value = "")]
     aws_secret_access_key: String,
 
-    #[arg(long, default_value = "1")]
+    #[arg(long, default_value = "2")]
     num_shards: u32,
 
     #[arg(
@@ -52,6 +52,10 @@ struct Args {
         help = "Number of full nodes that will be initially connected to validators"
     )]
     first_full_nodes: u64,
+
+    // Values: "default", "sparse", "groups", "small"
+    #[arg(long, default_value = "default")]
+    topology: String,
     // #[arg(long, default_value = "5")]
     // num_validators: u32,
 
@@ -211,6 +215,10 @@ aws_secret_access_key = "{aws_secret_access_key}"
     }
 
     let mut validator_idx = 1;
+
+    let mut group_1_idx = 1;
+    let mut group_2_idx = 2;
+
     let mut full_node_idx = 1;
 
     // Create a config file for the full nodes
@@ -221,34 +229,167 @@ aws_secret_access_key = "{aws_secret_access_key}"
         let host = format!("0.0.0.0");
         let gossip_multi_addr = format!("/ip4/{host}/udp/{default_gossip_port}/quic-v1");
 
-        // Full nodes are connected to 2 validator and 2 full nodes
         let mut other_nodes_addresses = Vec::new();
 
-        // Connect to 2 validators in round robin based on full node id, only for first_full_nodes
-        if i < args.first_full_nodes {
-            for _ in 0..2 {
-                let val = infra
-                    .instances
-                    .get(format!("val{validator_idx}").as_str())
-                    .expect("validator index out of bounds");
-                if !other_nodes_addresses.contains(&val.private_ip) {
-                    other_nodes_addresses.push(val.private_ip.clone());
+        match args.topology.as_str() {
+            "default" => {
+                // Connect to 2 validators in round robin based on full node id, only for first_full_nodes
+                if i < args.first_full_nodes {
+                    for _ in 0..2 {
+                        let val = infra
+                            .instances
+                            .get(format!("val{validator_idx}").as_str())
+                            .expect("validator index out of bounds");
+                        if !other_nodes_addresses.contains(&val.private_ip) {
+                            other_nodes_addresses.push(val.private_ip.clone());
+                        }
+                        validator_idx = (validator_idx % infra.num_validators) + 1;
+                    }
                 }
-                validator_idx = (validator_idx % infra.num_validators) + 1;
-            }
-        }
-        // Connect to 10 other full nodes: the next ones in id order (wrapping around)
-        for _ in 0..10 {
-            if full_node_idx != i {
-                let node = infra
-                    .instances
-                    .get(format!("full{full_node_idx}").as_str())
-                    .expect("full node index out of bounds");
-                if !other_nodes_addresses.contains(&node.private_ip) {
-                    other_nodes_addresses.push(node.private_ip.clone());
+                // Connect to 2 other full nodes: the next ones in id order (wrapping around)
+                for _ in 0..2 {
+                    if full_node_idx != i {
+                        let node = infra
+                            .instances
+                            .get(format!("full{full_node_idx}").as_str())
+                            .expect("full node index out of bounds");
+                        if !other_nodes_addresses.contains(&node.private_ip) {
+                            other_nodes_addresses.push(node.private_ip.clone());
+                        }
+                    }
+                    full_node_idx = (full_node_idx % infra.num_full_nodes) + 1;
                 }
             }
-            full_node_idx = (full_node_idx % infra.num_full_nodes) + 1;
+            "sparse" => {
+                // 25% of the full nodes are connected to 2 validators
+                // The rest are connected to 4 full nodes from the previous group
+                if i <= (infra.num_full_nodes / 4) {
+                    // Connect to 2 validators
+                    for _ in 0..2 {
+                        let val = infra
+                            .instances
+                            .get(format!("val{validator_idx}").as_str())
+                            .expect("validator index out of bounds");
+                        if !other_nodes_addresses.contains(&val.private_ip) {
+                            other_nodes_addresses.push(val.private_ip.clone());
+                        }
+                        validator_idx = (validator_idx % infra.num_validators) + 1;
+                    }
+                } else {
+                    // Connect to 4 full nodes from the previous group
+                    for _ in 0..4 {
+                        let node = infra
+                            .instances
+                            .get(format!("full{full_node_idx}").as_str())
+                            .expect("full node index out of bounds");
+                        if !other_nodes_addresses.contains(&node.private_ip) {
+                            other_nodes_addresses.push(node.private_ip.clone());
+                        }
+                        full_node_idx = (full_node_idx % (infra.num_full_nodes / 4)) + 1;
+                    }
+                }
+            }
+            "groups" => {
+                // 3 groups
+                // Connect group 1 to 2 validators
+                // Connect group 2 to 2 full nodes from group 1
+                // Connect group 3 to 2 full nodes from group 2
+                match (i - 1) % 3 {
+                    0 => {
+                        // Connect to 2 validators
+                        for _ in 0..1 {
+                            let val = infra
+                                .instances
+                                .get(format!("val{validator_idx}").as_str())
+                                .expect("validator index out of bounds");
+                            if !other_nodes_addresses.contains(&val.private_ip) {
+                                other_nodes_addresses.push(val.private_ip.clone());
+                            }
+                            validator_idx = (validator_idx % infra.num_validators) + 1;
+                        }
+                    }
+                    1 => {
+                        // Connect to 2 full nodes from group 1
+                        for _ in 0..2 {
+                            let node = infra
+                                .instances
+                                .get(format!("full{group_1_idx}").as_str())
+                                .expect("full node index out of bounds");
+                            if !other_nodes_addresses.contains(&node.private_ip) {
+                                other_nodes_addresses.push(node.private_ip.clone());
+                            }
+                            if group_1_idx + 2 >= infra.num_full_nodes {
+                                group_1_idx = 1;
+                            } else {
+                                group_1_idx = ((group_1_idx + 2) % infra.num_full_nodes) + 1;
+                            }
+                        }
+                    }
+                    2 => {
+                        // Connect to 2 full nodes from group 2
+                        for _ in 0..2 {
+                            let node = infra
+                                .instances
+                                .get(format!("full{group_2_idx}").as_str())
+                                .expect("full node index out of bounds");
+                            if !other_nodes_addresses.contains(&node.private_ip) {
+                                other_nodes_addresses.push(node.private_ip.clone());
+                            }
+                            if group_2_idx + 2 >= infra.num_full_nodes {
+                                group_2_idx = 2;
+                            } else {
+                                group_2_idx = ((group_2_idx + 2) % infra.num_full_nodes) + 1;
+                            }
+                        }
+                    }
+                    _ => panic!("Unexpected group assignment"),
+                }
+            }
+            "small" => {
+                if infra.num_full_nodes != 3 {
+                    panic!("The 'small' topology is only supported for 3 full nodes");
+                }
+                // Connect to all validators
+                for j in 1..=infra.num_validators {
+                    let val = infra
+                        .instances
+                        .get(format!("val{j}").as_str())
+                        .expect("validator index out of bounds");
+                    if !other_nodes_addresses.contains(&val.private_ip) {
+                        other_nodes_addresses.push(val.private_ip.clone());
+                    }
+                }
+
+                match i {
+                    1 => {}
+                    2 => {
+                        // Connect to full node 3
+                        let node = infra
+                            .instances
+                            .get("full3")
+                            .expect("full node index out of bounds");
+                        if !other_nodes_addresses.contains(&node.private_ip) {
+                            other_nodes_addresses.push(node.private_ip.clone());
+                        }
+                    }
+                    3 => {
+                        // Connect to full node 2
+                        let node = infra
+                            .instances
+                            .get("full2")
+                            .expect("full node index out of bounds");
+                        if !other_nodes_addresses.contains(&node.private_ip) {
+                            other_nodes_addresses.push(node.private_ip.clone());
+                        }
+                    }
+                    _ => {
+                        panic!("Unexpected full node index for 'small' topology: {}", i);
+                    }
+                }
+            }
+            _ => {
+                panic!("Unknown topology: {}", args.topology);
+            }
         }
 
         other_nodes_addresses = other_nodes_addresses

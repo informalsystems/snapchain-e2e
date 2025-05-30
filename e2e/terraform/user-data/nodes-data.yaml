@@ -136,13 +136,6 @@ write_files:
       LimitNOFILE=4096
       [Install]
       WantedBy=multi-user.target
-  - path: /app/entrypoint.sh
-    content: |
-      #!/bin/sh
-      set -e
-      # eth0 = public network, eth1 = private network
-      tc qdisc add dev eth1 root netem delay 100ms 10ms distribution normal || true
-      /app/snapchain --config-path /app/config/config.toml
   - path: /app/start.sh
     content: |
       #!/bin/sh
@@ -151,10 +144,8 @@ write_files:
         --network host \
         --mount type=bind,source=/app/config,target=/app/config \
         --mount type=bind,source=/app/data,target=/app/data \
-        --mount type=bind,source=/app/entrypoint.sh,target=/app/entrypoint.sh \
         --cap-add=NET_ADMIN \
         --env RUST_BACKTRACE=full \
-        --entrypoint /app/entrypoint.sh \
         snapchain-node
 runcmd:
 # Set up firewall
@@ -189,7 +180,6 @@ runcmd:
   - mkdir /app/config
   - mkdir /app/data
   - chmod +x /app/start.sh
-  - chmod +x /app/entrypoint.sh
 # Set up NFS share, (Mounting will happen post-install)
   - mkdir /data
   - chown nobody:nogroup /data

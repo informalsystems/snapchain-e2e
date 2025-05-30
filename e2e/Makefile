@@ -56,6 +56,9 @@ sync-debug:
 remote-create:
 	cd terraform && time terraform apply -parallelism=200 $(TERRAFORM_VARS)
 
+remote-setup:
+	../target/debug/setup_remote_testnet --topology default
+
 remote-destroy:
 	cd terraform && time terraform destroy -parallelism=200 $(TERRAFORM_VARS)
 
@@ -67,7 +70,7 @@ remote-stop:
 
 remote-perturb:
 	./scripts/ssh-node.sh full1 docker stop node
-	sleep 30
+	sleep 60
 	./scripts/ssh-node.sh full1 /app/start.sh
 
 remote-snapshot:
