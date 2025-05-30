@@ -7690,7 +7690,7 @@ dependencies = [
 
 [[package]]
 name = "snapchain"
-version = "0.2.20"
+version = "0.2.22"
 dependencies = [
  "alloy-contract",
  "alloy-dyn-abi",
@@ -7768,6 +7768,7 @@ dependencies = [
  "threadpool",
  "tokio",
  "tokio-cron-scheduler",
+ "tokio-retry2",
  "tokio-stream",
  "toml 0.8.20",
  "tonic",
@@ -8383,6 +8384,18 @@ checksum = "bbae76ab933c85776efabc971569dd6119c580d8f5d448769dec1764bf796ef2"
 dependencies = [
  "native-tls",
  "tokio",
+]
+
+[[package]]
+name = "tokio-retry2"
+version = "0.5.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1264d076dd34560544a2799e40e457bd07c43d30f4a845686b031bcd8455c84f"
+dependencies = [
+ "pin-project",
+ "rand 0.9.0",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

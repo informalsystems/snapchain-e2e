@@ -1,3 +1,4 @@
+use super::RocksdbError;
 use crate::proto::FarcasterNetwork;
 use crate::utils::statsd_wrapper::StatsdClientWrapper;
 use aws_config::Region;
@@ -24,10 +25,8 @@ use tar::Archive;
 use thiserror::Error;
 use tokio::io::AsyncReadExt;
 use tokio::io::{AsyncWriteExt, BufWriter};
-
-use tracing::{error, info};
-
-use super::RocksdbError;
+use tokio_retry2::{Retry, RetryError};
+use tracing::{error, info, warn};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
@@ -267,14 +266,23 @@ pub async fn download_snapshots(
         );
 
         let filename = format!("{}/{}", snapshot_dir, chunk);
-        let mut file = BufWriter::new(tokio::fs::File::create(filename.clone()).await?);
-        let download_response = reqwest::get(download_path).await?;
-        let mut byte_stream = download_response.bytes_stream();
+        let retry_strategy = tokio_retry2::strategy::FixedInterval::from_millis(10_000).take(5);
+        let result = Retry::spawn(retry_strategy, async || {
+            let result = download_file(download_path.as_str(), filename.as_str()).await;
+            match result {
+                Ok(_) => Ok(()),
+                Err(e) => {
+                    warn!("Failed to download {} due to error: {}", filename, e);
+                    RetryError::to_transient(e)
+                }
+            }
+        })
+        .await;
 
-        while let Some(piece) = byte_stream.next().await {
-            file.write_all(&piece?).await?;
+        if let Err(e) = result {
+            error!("Failed to download snapshot chunk {}: {}", filename, e);
+            return Err(SnapshotError::from(e));
         }
-        file.flush().await?;
         local_chunks.push(filename);
     }
 
@@ -299,6 +307,17 @@ pub async fn download_snapshots(
     archive.unpack(&db_dir)?;
 
     std::fs::remove_dir_all(snapshot_dir)?;
+    Ok(())
+}
+
+async fn download_file(url: &str, filename: &str) -> Result<(), SnapshotError> {
+    let mut file = BufWriter::new(tokio::fs::File::create(filename).await?);
+    let download_response = reqwest::get(url).await?;
+    let mut byte_stream = download_response.bytes_stream();
+    while let Some(piece) = byte_stream.next().await {
+        file.write_all(&piece?).await?;
+    }
+    file.flush().await?;
     Ok(())
 }
 

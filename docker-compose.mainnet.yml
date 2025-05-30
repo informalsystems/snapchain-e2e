@@ -41,12 +41,14 @@ services:
         EOF
         exec $0 $@ # Now run the original command
     command: [ "./snapchain", "--config-path", "config.toml" ]
+    restart: always
     ports:
       - "3381:3381/tcp"
       - "3382:3382/udp"
       - "3383:3383/tcp"
     volumes:
       - .rocks:/app/.rocks
+      - .rocks.snapshot:/app/.rocks.snapshot
     networks:
       - snapchain
 
