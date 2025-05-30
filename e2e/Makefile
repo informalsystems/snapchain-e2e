@@ -70,6 +70,9 @@ remote-perturb:
 	sleep 30
 	./scripts/ssh-node.sh full1 /app/start.sh
 
+remote-snapshot:
+	./scripts/snapshot.sh
+
 # Reset the app state in all nodes.
 remote-reset-states:
 	./scripts/pssh.sh '(docker stop node || true) && rm -rdf /app/data/.rocks'
