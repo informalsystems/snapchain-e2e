@@ -47,9 +47,9 @@ The testnet will be deployed to DigitalOcean.
 
 5. Before creating the remote nodes, the Docker image should exist locally. Build it with:
     ```sh
-    make build
+    make remote-build
     ```
-    This command creates an image with the tag `snapchain-node`.
+    This command creates an image with the tag `snapchain-node` and it may take a rather long time to compile.
 
 ### Run the testnet
 
