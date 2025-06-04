@@ -7,6 +7,7 @@ Run the testnet with:
 make build
 make setup
 make start
+make load
 make perturb
 make stop
 make clean
