@@ -26,6 +26,10 @@ setup:
 
 start:
 	docker compose up -d
+	cargo run --bin testnet_init_users
+
+load:
+	cargo run --bin testnet_submit_messages
 
 stop:
 	docker compose down --remove-orphans --volumes
