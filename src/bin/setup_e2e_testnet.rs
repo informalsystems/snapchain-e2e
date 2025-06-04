@@ -151,12 +151,20 @@ async fn main() {
             Some(number) => format!("stop_block_number = {number}").to_string(),
         };
 
+        // If this is the first node, enable an admin service
+        let admin_rpc_auth = if id == 1 {
+            "admin_rpc_auth=\"user:test\""
+        } else {
+            ""
+        };
+
         let config_file_content = format!(
             r#"
 rpc_address="{rpc_address}"
 http_address="{http_address}"
 rocksdb_dir="{db_dir}"
 l1_rpc_url="{l1_rpc_url}"
+{admin_rpc_auth}
 
 [statsd]
 prefix="{statsd_prefix}"

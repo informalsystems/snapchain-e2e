@@ -1,9 +1,6 @@
 # syntax=docker.io/docker/dockerfile:1.7-labs
 # The above line enables experimental features (namely, `COPY --exclude`)
 
-# Add the "code" build context to access local source code during build.
-#  docker build . --build-context code=$SNAPCHAIN_DIR
-
 FROM rust:1.85 AS builder
 
 RUN apt-get update && apt-get install -y libclang-dev git libjemalloc-dev llvm-dev make protobuf-compiler libssl-dev openssh-client cmake
@@ -37,8 +34,8 @@ WORKDIR /usr/src/app
 # since the Cargo configuration references files in src.
 # This means we'll re-fetch all crates every time the source code changes,
 # which isn't ideal.
-COPY --from=code ./Cargo.toml ./build.rs ./
-COPY --from=code --exclude=src/bin src ./src
+COPY ../Cargo.toml ../build.rs ./
+COPY --exclude=../src/bin ../src ./src
 
 ENV RUST_BACKTRACE=full
 RUN --mount=type=cache,target=/usr/local/cargo/registry cargo build --release
