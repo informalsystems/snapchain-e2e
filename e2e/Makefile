@@ -19,17 +19,17 @@ TERRAFORM_VARS := -var='testnet_dir=$(TESTNET_DIR)' \
 IMAGE_NAME := snapchain-node
 
 build:
-	time docker build -t $(IMAGE_NAME) --platform linux/amd64 --build-context "code=.." .
-	
-build-config:	
-	cargo build --bin setup_e2e_testnet
-	cargo build --bin setup_remote_testnet
+	time docker build -t $(IMAGE_NAME)-local .
 
 setup:
-	../target/debug/setup_e2e_testnet
+	cargo run --bin setup_e2e_testnet
 
 start:
 	docker compose up -d
+	cargo run --bin testnet_init_users
+
+load:
+	cargo run --bin testnet_submit_messages
 
 stop:
 	docker compose down --remove-orphans --volumes
@@ -53,11 +53,15 @@ sync-debug:
 
 .PHONY: build setup start stop clean perturb sync-debug 
 
+remote-build:
+	time docker build -t $(IMAGE_NAME) --platform linux/amd64 .
+
 remote-create:
 	cd terraform && time terraform apply -parallelism=200 $(TERRAFORM_VARS)
 
+# Locally create the nodes' config files.
 remote-setup:
-	../target/debug/setup_remote_testnet --topology default
+	cargo run --bin setup_remote_testnet -- --topology default
 
 remote-destroy:
 	cd terraform && time terraform destroy -parallelism=200 $(TERRAFORM_VARS)
