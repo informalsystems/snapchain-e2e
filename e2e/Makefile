@@ -19,7 +19,7 @@ TERRAFORM_VARS := -var='testnet_dir=$(TESTNET_DIR)' \
 IMAGE_NAME := snapchain-node
 
 build:
-	time docker build -t $(IMAGE_NAME)-local .
+	time docker build -t $(IMAGE_NAME)-local ..
 
 setup:
 	cargo run --bin setup_e2e_testnet
@@ -54,7 +54,7 @@ sync-debug:
 .PHONY: build setup start stop clean perturb sync-debug 
 
 remote-build:
-	time docker build -t $(IMAGE_NAME) --platform linux/amd64 .
+	time docker build -t $(IMAGE_NAME) --platform linux/amd64 ..
 
 remote-create:
 	cd terraform && time terraform apply -parallelism=200 $(TERRAFORM_VARS)
