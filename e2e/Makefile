@@ -22,14 +22,14 @@ build:
 	time docker build -t $(IMAGE_NAME)-local ..
 
 setup:
-	cargo run --bin setup_e2e_testnet
+	cargo run --bin setup_e2e_testnet -- --num-validators=$(NUM_VALIDATORS) --num-full-nodes=$(NUM_FULL_NODES) --num-shards=$(NUM_SHARDS)
 
 start:
 	docker compose up -d
 	cargo run --bin testnet_init_users
 
 load:
-	cargo run --bin testnet_submit_messages
+	cargo run --bin testnet_spam -- --rate 500 --max-time 30
 
 stop:
 	docker compose down --remove-orphans --volumes
