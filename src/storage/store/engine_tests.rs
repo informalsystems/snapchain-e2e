@@ -24,6 +24,7 @@ mod tests {
     use base64::prelude::*;
     use ed25519_dalek::{Signer, SigningKey};
     use prost::Message;
+    use rand::RngCore;
 
     fn from_hex(s: &str) -> Vec<u8> {
         hex::decode(s).unwrap()
@@ -1677,8 +1678,15 @@ mod tests {
     #[tokio::test]
     async fn test_revoking_a_signer_deletes_all_messages_from_that_signer() {
         let (mut engine, _tmpdir) = test_helper::new_engine();
-        let signer = SigningKey::generate(&mut rand::rngs::OsRng);
-        let another_signer = &SigningKey::generate(&mut rand::rngs::OsRng);
+
+        let mut secret = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut secret);
+        let signer = SigningKey::from_bytes(&secret);
+
+        let mut another_secret = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut another_secret);
+        let another_signer = &SigningKey::from_bytes(&another_secret);
+
         let timestamp = factory::time::farcaster_time();
         let msg1 = messages_factory::casts::create_cast_add(
             FID_FOR_TEST,

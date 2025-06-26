@@ -9,6 +9,7 @@ use ed25519_dalek::{SecretKey, SigningKey};
 use informalsystems_malachitebft_core_types::{NilOrVal, Round};
 use libp2p::identity::ed25519::Keypair;
 use prost::Message;
+use rand::RngCore;
 use std::sync::Arc;
 use tempfile;
 use tokio::sync::mpsc;
@@ -470,7 +471,9 @@ pub fn default_custody_address() -> Vec<u8> {
 }
 
 pub fn generate_signer() -> SigningKey {
-    SigningKey::generate(&mut rand::thread_rng())
+    let mut secret = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut secret);
+    SigningKey::from_bytes(&secret)
 }
 
 #[allow(dead_code)]

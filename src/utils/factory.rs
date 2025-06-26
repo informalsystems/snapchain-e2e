@@ -10,9 +10,12 @@ use prost::Message;
 
 pub mod signers {
     use ed25519_dalek::SigningKey;
+    use rand::RngCore;
 
     pub fn generate_signer() -> SigningKey {
-        SigningKey::generate(&mut rand::thread_rng())
+        let mut secret = [0u8; 32];
+        rand::thread_rng().fill_bytes(&mut secret);
+        SigningKey::from_bytes(&secret)
     }
 }
 
