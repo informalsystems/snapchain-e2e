@@ -12,7 +12,7 @@ use tokio::sync::{broadcast, mpsc, oneshot};
 
 use crate::core::error::HubError;
 use crate::core::util::FarcasterTime;
-use crate::proto::OnChainEventType;
+use crate::proto::{FarcasterNetwork, OnChainEventType};
 use crate::{
     core::types::SnapchainValidatorContext,
     network::gossip::GossipEvent,
@@ -22,7 +22,6 @@ use crate::{
         store::{
             account::{
                 get_message_by_key, make_message_primary_key, make_ts_hash, type_to_set_postfix,
-                UserDataStore,
             },
             engine::MempoolMessage,
             stores::Stores,
@@ -32,6 +31,7 @@ use crate::{
 };
 
 use super::routing::{MessageRouter, ShardRouter};
+use crate::version::version::{EngineVersion, ProtocolFeature};
 use governor::{Quota, RateLimiter};
 use moka::sync::{Cache, CacheBuilder};
 use std::num::NonZeroU32;
@@ -299,31 +299,9 @@ impl ReadNodeMempool {
                         }
                     }
                 },
-                MempoolMessage::ValidatorMessage(message) => {
-                    if let Some(onchain_event) = &message.on_chain_event {
-                        match stores.onchain_event_store.exists(&onchain_event) {
-                            Err(_) => return false,
-                            Ok(exists) => return exists,
-                        }
-                    }
-
-                    if let Some(fname_transfer) = &message.fname_transfer {
-                        match &fname_transfer.proof {
-                            None => return false,
-                            Some(proof) => {
-                                let username_proof = UserDataStore::get_username_proof(
-                                    &stores.user_data_store,
-                                    &mut RocksDbTransactionBatch::new(),
-                                    &proof.name,
-                                );
-                                match username_proof {
-                                    Err(_) | Ok(None) => return false,
-                                    Ok(Some(_)) => return true,
-                                }
-                            }
-                        }
-                    }
-                    return false;
+                MempoolMessage::ValidatorMessage(_) => {
+                    // Don't do duplicate checks for validator messages. They are infrequent, and engine can handle duplicates.
+                    false
                 }
             },
         }
@@ -395,11 +373,13 @@ pub struct Mempool {
     statsd_client: StatsdClientWrapper,
     read_node_mempool: ReadNodeMempool,
     rate_limits: Option<RateLimits>,
+    network: FarcasterNetwork,
 }
 
 impl Mempool {
     pub fn new(
         config: Config,
+        network: FarcasterNetwork,
         mempool_rx: mpsc::Receiver<MempoolRequest>,
         messages_request_rx: mpsc::Receiver<MempoolMessagesRequest>,
         num_shards: u32,
@@ -430,6 +410,7 @@ impl Mempool {
                 statsd_client.clone(),
             ),
             statsd_client,
+            network,
         }
     }
 
@@ -488,7 +469,10 @@ impl Mempool {
         if self.message_exceeds_rate_limits(shard, message) {
             self.statsd_client
                 .count_with_shard(shard, "mempool.rate_limit_hit", 1);
-            return Err(HubError::rate_limited("Rate limit exceeded"));
+            return Err(HubError::rate_limited(&format!(
+                "rate limit exceeded for FID {}",
+                message.fid()
+            )));
         }
         Ok(())
     }
@@ -499,11 +483,50 @@ impl Mempool {
         source: MempoolSource,
     ) -> Result<(), HubError> {
         let fid = message.fid();
-        let shard_id = self
+        let original_shard_id = self
             .read_node_mempool
             .message_router
             .route_fid(fid, self.read_node_mempool.num_shards);
 
+        let result = self
+            .insert_into_shard(original_shard_id, message.clone(), source.clone())
+            .await;
+
+        // Fname transfers are mirrored to both the sender and receiver shard.
+        if let MempoolMessage::ValidatorMessage(inner_message) = &message {
+            if let Some(_fname_transfer) = &inner_message.fname_transfer {
+                let version = EngineVersion::current(self.network);
+                // Send the username transfer to all other shards, transfers from a->b->c are
+                // correctly tracked. Due to current limitations of the engine, if we transfer from
+                // shard 1 to shard 2, and then transfer within shard 2, we will keep the transfer
+                // around forever on shard 1. See test_fname_transfer for an example.
+                if version.is_enabled(ProtocolFeature::UsernameShardRoutingFix) {
+                    for copy_shard in 1..self.read_node_mempool.num_shards {
+                        if copy_shard != original_shard_id {
+                            let copy_result = self
+                                .insert_into_shard(copy_shard, message.clone(), source.clone())
+                                .await;
+                            if copy_result.is_err() {
+                                warn!(
+                                    "Failed to insert fname transfer into copy shard {}: {:?}",
+                                    copy_shard, copy_result
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        result
+    }
+
+    async fn insert_into_shard(
+        &mut self,
+        shard_id: u32,
+        message: MempoolMessage,
+        source: MempoolSource,
+    ) -> Result<(), HubError> {
         match self.messages.get_mut(&shard_id) {
             Some(shard_messages) => {
                 if shard_messages.contains_key(&message.mempool_key()) {

@@ -1,9 +1,9 @@
 use crate::core::types::FARCASTER_EPOCH;
 use crate::proto as message;
 use crate::proto::{OnChainEvent, OnChainEventType};
+use alloy_signer::SignerSync;
 use ed25519_dalek::{SecretKey, Signer, SigningKey};
 use hex::FromHex;
-use message::CastType::Cast;
 use message::MessageType;
 use message::{CastAddBody, FarcasterNetwork, MessageData};
 use prost::Message;
@@ -48,7 +48,7 @@ pub mod time {
 
 pub mod events_factory {
     use super::*;
-    use crate::proto;
+    use crate::proto::{self, TierPurchaseBody, TierType};
 
     pub fn create_onchain_event(fid: u64) -> OnChainEvent {
         OnChainEvent {
@@ -196,6 +196,36 @@ pub mod events_factory {
             )),
         }
     }
+
+    pub fn create_pro_user_event(
+        fid: u64,
+        for_days: u64,
+        block_timestamp: Option<u32>,
+    ) -> OnChainEvent {
+        let block_timestamp = block_timestamp.unwrap_or(time::current_timestamp_with_offset(-10));
+        let random_number_under_1000 = rand::random::<u32>() % 1000;
+        // Ensure higher timestamp always has higher block number by left shifting the timestamp by 10 bits (1024)
+        let block_number = block_timestamp.checked_shl(10).unwrap() + random_number_under_1000;
+        OnChainEvent {
+            r#type: OnChainEventType::EventTypeTierPurchase as i32,
+            chain_id: 10,
+            block_number,
+            block_hash: vec![],
+            block_timestamp: block_timestamp as u64,
+            transaction_hash: rand::random::<[u8; 32]>().to_vec(),
+            log_index: 0,
+            fid,
+            tx_index: 0,
+            version: 1,
+            body: Some(proto::on_chain_event::Body::TierPurchaseEventBody(
+                TierPurchaseBody {
+                    for_days,
+                    tier_type: TierType::Pro as i32,
+                    payer: rand::random::<[u8; 32]>().to_vec(),
+                },
+            )),
+        }
+    }
 }
 
 pub mod messages_factory {
@@ -255,7 +285,34 @@ pub mod messages_factory {
 
     pub mod casts {
         use super::*;
-        use crate::proto::CastRemoveBody;
+        use crate::proto::{self, CastRemoveBody, CastType, Embed};
+
+        pub fn create_cast_add_rich(
+            fid: u64,
+            text: &str,
+            cast_type: Option<CastType>,
+            embeds: Vec<Embed>,
+            parent: Option<proto::CastId>,
+            timestamp: Option<u32>,
+            private_key: Option<&SigningKey>,
+        ) -> message::Message {
+            let cast_add = CastAddBody {
+                text: text.to_string(),
+                embeds,
+                embeds_deprecated: vec![],
+                mentions: vec![],
+                mentions_positions: vec![],
+                parent: parent.map(|p| proto::cast_add_body::Parent::ParentCastId(p)),
+                r#type: cast_type.unwrap_or(CastType::Cast) as i32,
+            };
+            create_message_with_data(
+                fid,
+                MessageType::CastAdd,
+                message::message_data::Body::CastAddBody(cast_add),
+                timestamp,
+                private_key,
+            )
+        }
 
         pub fn create_cast_add(
             fid: u64,
@@ -263,19 +320,34 @@ pub mod messages_factory {
             timestamp: Option<u32>,
             private_key: Option<&SigningKey>,
         ) -> message::Message {
-            let cast_add = CastAddBody {
-                text: text.to_string(),
-                embeds: vec![],
-                embeds_deprecated: vec![],
-                mentions: vec![],
-                mentions_positions: vec![],
-                parent: None,
-                r#type: Cast as i32,
-            };
-            create_message_with_data(
+            create_cast_add_rich(
                 fid,
-                MessageType::CastAdd,
-                message::message_data::Body::CastAddBody(cast_add),
+                text,
+                Some(CastType::Cast),
+                vec![],
+                None,
+                timestamp,
+                private_key,
+            )
+        }
+
+        pub fn create_cast_with_parent(
+            fid: u64,
+            text: &str,
+            parent_fid: u64,
+            parent_hash: &Vec<u8>,
+            timestamp: Option<u32>,
+            private_key: Option<&SigningKey>,
+        ) -> message::Message {
+            create_cast_add_rich(
+                fid,
+                text,
+                Some(CastType::Cast),
+                vec![],
+                Some(proto::CastId {
+                    fid: parent_fid,
+                    hash: parent_hash.clone(),
+                }),
                 timestamp,
                 private_key,
             )
@@ -521,13 +593,32 @@ pub mod messages_factory {
                 private_key,
             )
         }
+
+        pub fn create_from_proof(
+            proof: &UserNameProof,
+            private_key: Option<&SigningKey>,
+        ) -> message::Message {
+            create_message_with_data(
+                proof.fid,
+                MessageType::UsernameProof,
+                message::message_data::Body::UsernameProofBody(proof.clone()),
+                Some(proof.timestamp as u32),
+                private_key,
+            )
+        }
     }
 }
 
 pub mod username_factory {
+    use alloy_dyn_abi::TypedData;
+    use serde_json::json;
+
     use super::*;
+    use crate::core::validations::verification::eip_712_domain;
+    use crate::core::validations::verification::name_registry_domain;
     use crate::proto::FnameTransfer;
     use crate::proto::UserNameProof;
+    use crate::storage::store::test_helper::default_custody_address;
 
     pub fn create_username_proof(
         fid: u64,
@@ -536,8 +627,11 @@ pub mod username_factory {
         timestamp: Option<u64>,
         owner: Vec<u8>,
     ) -> UserNameProof {
+        let timestamp = timestamp
+            .map(|t| t as u64)
+            .unwrap_or_else(|| time::current_timestamp() as u64);
         UserNameProof {
-            timestamp: timestamp.unwrap_or_else(|| time::current_timestamp() as u64),
+            timestamp,
             name: name.as_bytes().to_vec(),
             owner,
             signature: rand::random::<[u8; 32]>().to_vec(),
@@ -548,21 +642,51 @@ pub mod username_factory {
 
     pub fn create_transfer(
         fid: u64,
-        name: &String,
-        timestamp: Option<u64>,
+        name: &str,
+        timestamp: Option<u32>,
         from_fid: Option<u64>,
-        owner: Vec<u8>,
+        owner: Option<Vec<u8>>,
+        fname_signer: alloy_signer_local::PrivateKeySigner,
     ) -> FnameTransfer {
+        let usable_timestamp = timestamp.unwrap_or_else(|| time::current_timestamp() as u32);
+        let usable_owner = owner.unwrap_or_else(|| default_custody_address());
+        let username = name;
+
+        let json = json!({
+            "types": eip_712_domain(),
+            "primaryType": "UserNameProof",
+            "domain": name_registry_domain(),
+            "message": {
+                "name": username,
+                "timestamp": usable_timestamp,
+                "owner": hex::encode(usable_owner.clone())
+            }
+        });
+
+        let typed_data = serde_json::from_value::<TypedData>(json);
+        if typed_data.is_err() {
+            panic!("invalid typed data");
+        }
+
+        let data = typed_data.unwrap();
+        let prehash = data.eip712_signing_hash();
+        if prehash.is_err() {
+            panic!("invalid hash: {}", prehash.unwrap_err());
+        }
+        let sig = fname_signer.sign_hash_sync(&prehash.unwrap());
+        let proof = UserNameProof {
+            timestamp: usable_timestamp.into(),
+            name: name.as_bytes().to_vec(),
+            owner: usable_owner,
+            signature: sig.unwrap().into(),
+            fid,
+            r#type: crate::proto::UserNameType::UsernameTypeFname as i32,
+        };
+
         FnameTransfer {
             id: rand::random::<u64>(),
             from_fid: from_fid.unwrap_or_else(|| 0),
-            proof: Some(create_username_proof(
-                fid,
-                crate::proto::UserNameType::UsernameTypeFname,
-                name,
-                timestamp,
-                owner,
-            )),
+            proof: Some(proof),
         }
     }
 }

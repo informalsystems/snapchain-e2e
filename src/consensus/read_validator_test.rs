@@ -3,9 +3,7 @@ mod tests {
 
     use std::collections::BTreeMap;
 
-    use libp2p::identity::ed25519::Keypair;
-
-    use crate::consensus::consensus::ValidatorSetConfig;
+    use crate::consensus::consensus::{SystemMessage, ValidatorSetConfig};
     use crate::consensus::read_validator::{Engine, ReadValidator};
     use crate::consensus::validator::{StoredValidatorSet, StoredValidatorSets};
     use crate::core::types::{Address, ShardId};
@@ -15,10 +13,18 @@ mod tests {
         self, commit_event, default_storage_event, new_engine_with_options, sign_chunk,
         EngineOptions, FID_FOR_TEST,
     };
+    use libp2p::identity::ed25519::Keypair;
+    use tokio::sync::mpsc;
 
     async fn setup(
         num_already_decided_blocks: u64,
-    ) -> (ShardEngine, ShardEngine, ReadValidator, Keypair) {
+    ) -> (
+        ShardEngine,
+        ShardEngine,
+        ReadValidator,
+        Keypair,
+        mpsc::Receiver<SystemMessage>,
+    ) {
         let proposer_keypair = Keypair::generate();
         let (mut proposer_engine, _) = test_helper::new_engine();
         let (mut read_node_engine, _) = test_helper::new_engine();
@@ -28,9 +34,8 @@ mod tests {
         }
 
         let (read_node_engine_clone, _) = new_engine_with_options(EngineOptions {
-            limits: None,
             db: Some(read_node_engine.db.clone()),
-            messages_request_tx: None,
+            ..Default::default()
         });
 
         let proposer_address = Address(proposer_keypair.public().to_bytes());
@@ -46,6 +51,8 @@ mod tests {
             &validator_set_config,
         )];
 
+        let (system_tx, system_rx) = mpsc::channel(100);
+
         let read_validator = ReadValidator {
             shard_id: read_node_engine.shard_id(),
             last_height: Height {
@@ -57,6 +64,7 @@ mod tests {
             buffered_blocks: BTreeMap::new(),
             statsd_client: test_helper::statsd_client(),
             validator_sets: StoredValidatorSets::new(read_node_engine.shard_id(), validator_sets),
+            system_tx,
         };
 
         (
@@ -64,6 +72,7 @@ mod tests {
             read_node_engine,
             read_validator,
             proposer_keypair,
+            system_rx,
         )
     }
 
@@ -87,7 +96,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_decided_value() {
-        let (mut proposer_engine, read_node_engine, mut read_validator, proposer_keypair) =
+        let (mut proposer_engine, read_node_engine, mut read_validator, proposer_keypair, _) =
             setup(0).await;
         let shard_chunk = commit_shard_chunk(&mut proposer_engine, &proposer_keypair).await;
         let num_processed = process_decided_value(&mut read_validator, &shard_chunk).await;
@@ -107,8 +116,56 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_validate_protocol_version() {
+        let (_, _, read_validator, _, mut system_rx) = setup(0).await;
+        let valid_value = proto::DecidedValue {
+            value: Some(proto::decided_value::Value::Block(proto::Block {
+                header: Some(proto::BlockHeader {
+                    height: Some(Height {
+                        shard_index: read_validator.shard_id,
+                        block_number: 1,
+                    }),
+                    version: 1,
+                    timestamp: 1,
+                    chain_id: 1, // Mainnet
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })),
+        };
+        assert_eq!(read_validator.validate_protocol_version(&valid_value), true);
+        assert_eq!(system_rx.try_recv().is_err(), true); // No system message should be sent
+
+        let invalid_value = proto::DecidedValue {
+            value: Some(proto::decided_value::Value::Block(proto::Block {
+                header: Some(proto::BlockHeader {
+                    height: Some(Height {
+                        shard_index: read_validator.shard_id,
+                        block_number: 1,
+                    }),
+                    version: 2, // Invalid version
+                    timestamp: 1,
+                    chain_id: 1, // Mainnet
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })),
+        };
+        assert_eq!(
+            read_validator.validate_protocol_version(&invalid_value),
+            false
+        );
+        let system_message = system_rx.try_recv();
+        assert_eq!(system_message.is_ok(), true);
+        match system_message {
+            Ok(SystemMessage::ExitWithError { .. }) => (),
+            _ => panic!("Expected ExitWithError system message"),
+        }
+    }
+
+    #[tokio::test]
     async fn test_buffered_values() {
-        let (mut proposer_engine, read_node_engine, mut read_validator, proposer_keypair) =
+        let (mut proposer_engine, read_node_engine, mut read_validator, proposer_keypair, _) =
             setup(0).await;
         let shard_chunk1 = commit_shard_chunk(&mut proposer_engine, &proposer_keypair).await;
         let shard_chunk2 = commit_shard_chunk(&mut proposer_engine, &proposer_keypair).await;
@@ -149,7 +206,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_initialize() {
-        let (_proposer_engine, read_node_engine, mut read_validator, _proposer_keypair) =
+        let (_proposer_engine, read_node_engine, mut read_validator, _proposer_keypair, _) =
             setup(3).await;
 
         read_validator.initialize_height();
@@ -164,7 +221,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ignore_no_signatures() {
-        let (mut proposer_engine, _read_node_engine, mut read_validator, proposer_keypair) =
+        let (mut proposer_engine, _read_node_engine, mut read_validator, proposer_keypair, _) =
             setup(0).await;
         let mut shard_chunk = commit_shard_chunk(&mut proposer_engine, &proposer_keypair).await;
         // Remove signatures from chunk
@@ -189,7 +246,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ignore_invalid_signatures() {
-        let (mut proposer_engine, _read_node_engine, mut read_validator, proposer_keypair) =
+        let (mut proposer_engine, _read_node_engine, mut read_validator, proposer_keypair, _) =
             setup(0).await;
         let invalid_keypair = Keypair::generate();
         let mut shard_chunk = commit_shard_chunk(&mut proposer_engine, &invalid_keypair).await;

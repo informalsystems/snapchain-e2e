@@ -4,7 +4,7 @@ use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use informalsystems_malachitebft_metrics::{export, SharedRegistry};
-use snapchain::connectors::onchain_events::{L1Client, OnchainEventsRequest, RealL1Client};
+use snapchain::connectors::onchain_events::{ChainClients, OnchainEventsRequest};
 use snapchain::consensus::consensus::SystemMessage;
 use snapchain::mempool::mempool::{Mempool, MempoolRequest, ReadNodeMempool};
 use snapchain::mempool::routing;
@@ -19,7 +19,7 @@ use snapchain::proto::hub_service_server::HubServiceServer;
 use snapchain::storage::db::snapshot::download_snapshots;
 use snapchain::storage::db::RocksDB;
 use snapchain::storage::store::engine::Senders;
-use snapchain::storage::store::node_local_state::LocalStateStore;
+use snapchain::storage::store::node_local_state::{self, LocalStateStore};
 use snapchain::storage::store::stores::Stores;
 use snapchain::storage::store::BlockStore;
 use snapchain::utils::statsd_wrapper::StatsdClientWrapper;
@@ -45,12 +45,12 @@ async fn start_servers(
     mut gossip: SnapchainGossip,
     mempool_tx: mpsc::Sender<MempoolRequest>,
     shutdown_tx: mpsc::Sender<()>,
-    onchain_events_request_tx: mpsc::Sender<OnchainEventsRequest>,
+    onchain_events_request_tx: broadcast::Sender<OnchainEventsRequest>,
     statsd_client: StatsdClientWrapper,
     shard_stores: HashMap<u32, Stores>,
     shard_senders: HashMap<u32, Senders>,
     block_store: BlockStore,
-    l1_client: Option<Box<dyn L1Client>>,
+    chain_clients: ChainClients,
 ) {
     let grpc_addr = app_config.rpc_address.clone();
     let grpc_socket_addr: SocketAddr = grpc_addr.parse().unwrap();
@@ -58,7 +58,7 @@ async fn start_servers(
     let admin_service = MyAdminService::new(
         app_config.admin_rpc_auth.clone(),
         mempool_tx.clone(),
-        onchain_events_request_tx.clone(),
+        onchain_events_request_tx,
         shard_stores.clone(),
         block_store.clone(),
         app_config.snapshot.clone(),
@@ -76,7 +76,7 @@ async fn start_servers(
         app_config.fc_network,
         Box::new(routing::ShardRouter {}),
         mempool_tx.clone(),
-        l1_client,
+        chain_clients,
         VERSION.unwrap_or("unknown").to_string(),
         gossip.swarm.local_peer_id().to_string(),
     ));
@@ -359,15 +359,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let (messages_request_tx, messages_request_rx) = mpsc::channel(100);
 
-    let l1_client: Option<Box<dyn L1Client>> =
-        match RealL1Client::new(app_config.l1_rpc_url.clone()) {
-            Ok(client) => Some(Box::new(client)),
-            Err(_) => None,
-        };
+    let chains_clients = ChainClients::new(&app_config);
 
     let (sync_complete_tx, sync_complete_rx) = watch::channel(false);
 
-    let (onchain_events_request_tx, onchain_events_request_rx) = mpsc::channel(100);
+    let (onchain_events_request_tx, onchain_events_request_rx) = broadcast::channel(100);
 
     if app_config.read_node {
         let node = SnapchainReadNode::create(
@@ -414,7 +410,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             node.shard_stores.clone(),
             node.shard_senders.clone(),
             block_store.clone(),
-            l1_client,
+            chains_clients,
         )
         .await;
 
@@ -459,7 +455,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         SystemMessage::Mempool(_) => {},// No need to store mempool messages from other nodes in read nodes
                         SystemMessage::DecidedValueForReadNode(decided_value) => {
                             node.dispatch_decided_value(decided_value);
-
+                        }
+                        SystemMessage::ExitWithError(err) => {
+                            error!("Exiting due to: {}", err);
+                            node.stop();
+                            return Err(err.into());
                         }
                     }
                 }
@@ -500,6 +500,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         let mut mempool = Mempool::new(
             app_config.mempool.clone(),
+            app_config.fc_network,
             mempool_rx,
             messages_request_rx,
             app_config.consensus.num_shards,
@@ -527,9 +528,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let mut onchain_events_subscriber =
                 snapchain::connectors::onchain_events::Subscriber::new(
                     &app_config.onchain_events,
+                    node_local_state::Chain::Optimism,
                     mempool_tx.clone(),
                     statsd_client.clone(),
-                    local_state_store,
+                    local_state_store.clone(),
                     onchain_events_request_rx,
                 )?;
             tokio::spawn(async move {
@@ -537,7 +539,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 match result {
                     Ok(()) => {}
                     Err(e) => {
-                        error!("Error subscribing to on chain events {:#?}", e);
+                        error!("Error subscribing to on chain events on optimism {:#?}", e);
+                    }
+                }
+            });
+        }
+
+        if !app_config.base_onchain_events.rpc_url.is_empty() {
+            let mut onchain_events_subscriber =
+                snapchain::connectors::onchain_events::Subscriber::new(
+                    &app_config.base_onchain_events,
+                    node_local_state::Chain::Base,
+                    mempool_tx.clone(),
+                    statsd_client.clone(),
+                    local_state_store,
+                    onchain_events_request_tx.subscribe(),
+                )?;
+            tokio::spawn(async move {
+                let result = onchain_events_subscriber.run().await;
+                match result {
+                    Ok(()) => {}
+                    Err(e) => {
+                        error!("Error subscribing to on chain events on base {:#?}", e);
                     }
                 }
             });
@@ -553,7 +576,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             node.shard_stores.clone(),
             node.shard_senders.clone(),
             block_store.clone(),
-            l1_client,
+            chains_clients,
         )
         .await;
 
@@ -617,6 +640,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         SystemMessage::ReadNodeFinishedInitialSync{shard_id: _} => {
                             // Ignore these for validator nodes
                             sync_complete_tx.send(true)?; // TODO: is this necessary?
+                        },
+                        SystemMessage::ExitWithError(err) => {
+                            error!("Exiting due to: {}", err);
+                            node.stop();
+                            return Err(err.into());
                         }
                     }
                 }

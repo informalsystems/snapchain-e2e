@@ -764,6 +764,12 @@ pub struct StorageUnitDetails {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TierDetails {
+    tier_type: TierType,
+    expires_at: u64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum StoreType {
     None = 0,
     Casts = 1,
@@ -793,6 +799,7 @@ pub struct StorageLimitsResponse {
     pub units: u32,
     #[serde(rename = "unitDetails")]
     pub unit_details: Vec<StorageUnitDetails>,
+    pub tier_subscriptions: Vec<TierDetails>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -823,6 +830,7 @@ pub enum OnChainEventType {
     EVENT_TYPE_SIGNER_MIGRATED = 2,
     EVENT_TYPE_ID_REGISTER = 3,
     EVENT_TYPE_STORAGE_RENT = 4,
+    EVENT_TYPE_TIER_PURCHASE = 5,
 }
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -831,6 +839,12 @@ pub enum SignerEventType {
     SIGNER_EVENT_TYPE_ADD = 1,
     SIGNER_EVENT_TYPE_REMOVE = 2,
     SIGNER_EVENT_TYPE_ADMIN_RESET = 3,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub enum TierType {
+    None = 0,
+    Pro = 1,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -882,6 +896,14 @@ pub struct StorageRentEventBody {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TierPurchaseEventBody {
+    #[serde(with = "serdehex")]
+    pub payer: Vec<u8>,
+    pub for_days: u64,
+    pub tier_type: TierType,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct OnChainEvent {
     pub r#type: OnChainEventType,
     #[serde(rename = "chainId")]
@@ -914,6 +936,7 @@ pub struct OnChainEvent {
         skip_serializing_if = "Option::is_none"
     )]
     pub storage_rent_event_body: Option<StorageRentEventBody>,
+    pub tier_purchase_event_body: Option<TierPurchaseEventBody>,
     #[serde(rename = "txIndex")]
     pub tx_index: u32,
     pub version: u32,
@@ -924,6 +947,31 @@ pub struct OnChainEventResponse {
     pub events: Vec<OnChainEvent>,
     #[serde(rename = "nextPageToken", skip_serializing_if = "Option::is_none")]
     pub next_page_token: Option<String>,
+}
+
+#[allow(non_snake_case)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct FidAddressTypeRequest {
+    pub fid: u64,
+    #[serde(with = "serdehex")]
+    pub address: Vec<u8>,
+}
+
+impl FidAddressTypeRequest {
+    pub fn to_proto(self) -> proto::FidAddressTypeRequest {
+        proto::FidAddressTypeRequest {
+            fid: self.fid,
+            address: self.address,
+        }
+    }
+}
+
+#[allow(non_snake_case)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct FidAddressTypeResponse {
+    pub is_custody: bool,
+    pub is_auth: bool,
+    pub is_verified: bool,
 }
 
 #[allow(non_snake_case)]
@@ -975,6 +1023,7 @@ pub enum HubEventType {
     HUB_EVENT_TYPE_MERGE_USERNAME_PROOF = 6,
     HUB_EVENT_TYPE_MERGE_ON_CHAIN_EVENT = 9,
     HUB_EVENT_TYPE_MERGE_FAILURE = 10,
+    HUB_EVENT_TYPE_BLOCK_CONFIRMED = 11,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -1029,6 +1078,19 @@ pub struct MergeUsernameProofBody {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct BlockConfirmedBody {
+    #[serde(rename = "blockNumber")]
+    pub block_number: u64,
+    #[serde(rename = "shardIndex")]
+    pub shard_index: u32,
+    pub timestamp: u64,
+    #[serde(rename = "blockHash", with = "serdehex")]
+    pub block_hash: Vec<u8>,
+    #[serde(rename = "totalEvents")]
+    pub total_events: u64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct HubEvent {
     #[serde(rename = "type")]
     pub hub_event_type: String,
@@ -1051,6 +1113,8 @@ pub struct HubEvent {
     pub merge_on_chain_event_body: Option<MergeOnChainEventBody>,
     #[serde(rename = "mergeFailureBody", skip_serializing_if = "Option::is_none")]
     pub merge_failure_body: Option<MergeFailureBody>,
+    #[serde(rename = "blockConfirmedBody", skip_serializing_if = "Option::is_none")]
+    pub block_confirmed_body: Option<BlockConfirmedBody>,
     #[serde(rename = "blockNumber")]
     pub block_number: u64,
     #[serde(rename = "shardIndex")]
@@ -1777,6 +1841,7 @@ fn map_proto_on_chain_event_to_json_on_chain_event(
     let mut signer_migrated_event_body: Option<SignerMigratedEventBody> = None;
     let mut id_register_event_body: Option<IdRegisterEventBody> = None;
     let mut storage_rent_event_body: Option<StorageRentEventBody> = None;
+    let mut tier_purchase_event_body: Option<TierPurchaseEventBody> = None;
     match &onchain_event.body {
         None => {}
         Some(on_chain_event::Body::SignerEventBody(body)) => {
@@ -1818,6 +1883,16 @@ fn map_proto_on_chain_event_to_json_on_chain_event(
                 expiry: body.expiry,
             });
         }
+        Some(on_chain_event::Body::TierPurchaseEventBody(body)) => {
+            tier_purchase_event_body = Some(TierPurchaseEventBody {
+                payer: body.payer.clone(),
+                for_days: body.for_days,
+                tier_type: match body.tier_type {
+                    1 => TierType::Pro,
+                    _ => TierType::None,
+                },
+            })
+        }
     }
     Ok(OnChainEvent {
         r#type: match onchain_event.r#type {
@@ -1825,6 +1900,7 @@ fn map_proto_on_chain_event_to_json_on_chain_event(
             2 => OnChainEventType::EVENT_TYPE_SIGNER_MIGRATED,
             3 => OnChainEventType::EVENT_TYPE_ID_REGISTER,
             4 => OnChainEventType::EVENT_TYPE_STORAGE_RENT,
+            5 => OnChainEventType::EVENT_TYPE_TIER_PURCHASE,
             _ => OnChainEventType::EVENT_TYPE_NONE,
         },
         chain_id: onchain_event.chain_id,
@@ -1840,6 +1916,7 @@ fn map_proto_on_chain_event_to_json_on_chain_event(
         signer_migrated_event_body,
         id_register_event_body,
         storage_rent_event_body,
+        tier_purchase_event_body,
     })
 }
 
@@ -1852,6 +1929,7 @@ fn map_proto_hub_event_to_json_hub_event(
     let mut merge_username_proof_body: Option<MergeUsernameProofBody> = None;
     let mut merge_on_chain_event_body: Option<MergeOnChainEventBody> = None;
     let mut merge_failure_body: Option<MergeFailureBody> = None;
+    let mut block_confirmed_body: Option<BlockConfirmedBody> = None;
     match &hub_event.body {
         None => {}
         Some(hub_event::Body::MergeMessageBody(body)) => {
@@ -1912,6 +1990,15 @@ fn map_proto_hub_event_to_json_hub_event(
                 reason: body.reason.clone(),
             });
         }
+        Some(hub_event::Body::BlockConfirmedBody(body)) => {
+            block_confirmed_body = Some(BlockConfirmedBody {
+                block_number: body.block_number,
+                shard_index: body.shard_index,
+                timestamp: body.timestamp,
+                block_hash: body.block_hash.clone(),
+                total_events: body.total_events,
+            });
+        }
     }
 
     Ok(HubEvent {
@@ -1929,6 +2016,7 @@ fn map_proto_hub_event_to_json_hub_event(
         merge_username_proof_body,
         merge_on_chain_event_body,
         merge_failure_body,
+        block_confirmed_body,
         block_number: hub_event.block_number,
         shard_index: hub_event.shard_index,
     })
@@ -2005,6 +2093,10 @@ pub trait HubHttpService {
         &self,
         req: OnChainEventRequest,
     ) -> Result<OnChainEventResponse, ErrorResponse>;
+    async fn get_fid_address_type(
+        &self,
+        req: FidAddressTypeRequest,
+    ) -> Result<FidAddressTypeResponse, ErrorResponse>;
     async fn get_events(&self, req: EventsRequest) -> Result<EventsResponse, ErrorResponse>;
     async fn get_event_by_id(&self, req: EventRequest) -> Result<HubEvent, ErrorResponse>;
     async fn get_id_registry_on_chain_event_by_address(
@@ -2419,6 +2511,17 @@ impl HubHttpService for HubHttpServiceImpl {
                     },
                 })
                 .collect(),
+            tier_subscriptions: limits
+                .tier_subscriptions
+                .iter()
+                .map(|d| TierDetails {
+                    tier_type: match d.tier_type {
+                        1 => TierType::Pro,
+                        _ => TierType::None,
+                    },
+                    expires_at: d.expires_at,
+                })
+                .collect(),
         })
     }
 
@@ -2666,6 +2769,28 @@ impl HubHttpService for HubHttpServiceImpl {
         let onchain = response.into_inner();
         map_proto_on_chain_event_to_json_on_chain_event(onchain)
     }
+
+    /// GET /v1/fidAddressType
+    async fn get_fid_address_type(
+        &self,
+        req: FidAddressTypeRequest,
+    ) -> Result<FidAddressTypeResponse, ErrorResponse> {
+        let service = &self.service;
+        let grpc_req = tonic::Request::new(req.to_proto());
+        let response = service
+            .get_fid_address_type(grpc_req)
+            .await
+            .map_err(|e| ErrorResponse {
+                error: "Failed to get fid address type".to_string(),
+                error_detail: Some(e.to_string()),
+            })?;
+        let proto_resp = response.into_inner();
+        Ok(FidAddressTypeResponse {
+            is_custody: proto_resp.is_custody,
+            is_auth: proto_resp.is_auth,
+            is_verified: proto_resp.is_verified,
+        })
+    }
 }
 
 // Router implementation
@@ -2854,6 +2979,13 @@ impl Router {
                             service.get_id_registry_on_chain_event_by_address(req).await
                         })
                     },
+                )
+                .await
+            }
+            (&Method::GET, "/v1/fidAddressType") => {
+                self.handle_request::<FidAddressTypeRequest, FidAddressTypeResponse, _>(
+                    req,
+                    |service, req| Box::pin(async move { service.get_fid_address_type(req).await }),
                 )
                 .await
             }

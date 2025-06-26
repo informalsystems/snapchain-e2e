@@ -35,7 +35,7 @@ impl HubEventIdGenerator {
         self.current_seq = 0;
     }
 
-    fn generate_id(&mut self) -> Result<u64, HubError> {
+    fn generate_id(&mut self, event: &HubEvent) -> Result<u64, HubError> {
         if self.current_height >= 2u64.pow(HEIGHT_BITS) {
             return Err(HubError {
                 code: "bad_request.invalid_param".to_string(),
@@ -56,15 +56,30 @@ impl HubEventIdGenerator {
             });
         }
 
-        let event_id = Self::make_event_id(self.current_height, self.current_seq);
-        self.current_seq += 1;
+        let sequence = match event.r#type() {
+            crate::proto::HubEventType::BlockConfirmed => 0,
+            _ => {
+                if self.current_seq == 0 {
+                    self.current_seq = 1;
+                }
+                let seq = self.current_seq;
+                self.current_seq += 1;
+                seq
+            }
+        };
+
+        let event_id = Self::make_event_id(self.current_height, sequence);
         Ok(event_id)
     }
 
-    pub fn make_event_id(height: u64, seq: u64) -> u64 {
+    fn make_event_id(height: u64, seq: u64) -> u64 {
         let shifted_height = height << SEQUENCE_BITS;
         let padded_seq = seq & ((1 << SEQUENCE_BITS) - 1); // Ensures seq fits in SEQUENCE_BITS
         shifted_height | padded_seq
+    }
+
+    pub fn make_event_id_for_block_number(height: u64) -> u64 {
+        Self::make_event_id(height, 0)
     }
 
     pub fn extract_height_and_seq(event_id: u64) -> (u64, u64) {
@@ -100,7 +115,7 @@ impl StoreEventHandler {
         let mut generator = self.generator.lock().unwrap();
 
         // Generate the event ID
-        let event_id = generator.generate_id()?;
+        let event_id = generator.generate_id(&raw_event)?;
         raw_event.id = event_id;
 
         HubEvent::put_event_transaction(txn, &raw_event)?;
@@ -194,7 +209,7 @@ impl HubEvent {
         page_options: &PageOptions,
         throttle: Duration,
     ) -> Result<u32, HubError> {
-        let stop_event_id = HubEventIdGenerator::make_event_id(stop_height, 0);
+        let stop_event_id = HubEventIdGenerator::make_event_id_for_block_number(stop_height);
         let start_event_key = Self::make_event_key(0);
         let stop_event_key = Self::make_event_key(stop_event_id);
         let total_pruned = db

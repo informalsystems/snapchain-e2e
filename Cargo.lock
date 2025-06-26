@@ -7690,7 +7690,7 @@ dependencies = [
 
 [[package]]
 name = "snapchain"
-version = "0.2.22"
+version = "0.3.1"
 dependencies = [
  "alloy-contract",
  "alloy-dyn-abi",
@@ -7698,6 +7698,8 @@ dependencies = [
  "alloy-provider",
  "alloy-rlp",
  "alloy-rpc-types",
+ "alloy-signer",
+ "alloy-signer-local",
  "alloy-sol-types",
  "alloy-transport",
  "alloy-transport-http",

@@ -19,7 +19,6 @@ use tokio::time::Instant;
 use tokio::{select, time};
 use tracing::{error, warn};
 
-pub const PROTOCOL_VERSION: u32 = 1;
 pub const GENESIS_MESSAGE: &str =
     "It occurs to me that our survival may depend upon our talking to one another.";
 
@@ -201,7 +200,7 @@ impl Proposer for ShardProposer {
             let receive_delay = FarcasterTime::current()
                 .to_u64()
                 .saturating_sub(timestamp.to_u64());
-            let version = EngineVersion::version_for(&timestamp);
+            let version = self.engine.version_for(&timestamp);
             self.statsd_client.gauge_with_shard(
                 self.shard_id.shard_id(),
                 "proposer.receive_delay",
@@ -463,11 +462,15 @@ impl Proposer for BlockProposer {
         let witness_hash = blake3::hash(&shard_witness.encode_to_vec())
             .as_bytes()
             .to_vec();
+
+        let timestamp = FarcasterTime::current();
+        let version = EngineVersion::version_for(&timestamp, self.network);
+
         let block_header = BlockHeader {
             parent_hash,
             chain_id: self.network as i32,
-            version: PROTOCOL_VERSION,
-            timestamp: FarcasterTime::current().into(),
+            version: version.protocol_version(),
+            timestamp: timestamp.into(),
             height: Some(height.clone()),
             shard_witnesses_hash: witness_hash,
         };
@@ -514,7 +517,11 @@ impl Proposer for BlockProposer {
                 error!("Received block with wrong chain_id: {}", header.chain_id);
                 return Validity::Invalid;
             }
-            if header.version != PROTOCOL_VERSION {
+            let timestamp = FarcasterTime::new(header.timestamp);
+            let engine_version = EngineVersion::version_for(&timestamp, self.network);
+            let expected_version = engine_version.protocol_version();
+
+            if header.version != expected_version {
                 error!(
                     "Received block with wrong protocol version: {}",
                     header.version

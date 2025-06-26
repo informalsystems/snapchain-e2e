@@ -6,24 +6,28 @@ use crate::core::util::FarcasterTime;
 use crate::core::validations;
 use crate::core::validations::verification;
 use crate::mempool::mempool::MempoolMessagesRequest;
+use crate::proto::message_data::Body;
+use crate::proto::UserDataType;
 use crate::proto::UserNameProof;
-use crate::proto::UserNameType;
-use crate::proto::{self, Block, MessageType, ShardChunk, Transaction};
+use crate::proto::{self, hub_event, Block, MessageType, ShardChunk, Transaction};
 use crate::proto::{FarcasterNetwork, HubEvent};
+use crate::proto::{HubEventType, Protocol};
 use crate::proto::{OnChainEvent, OnChainEventType};
 use crate::storage::db::{PageOptions, RocksDB, RocksDbTransactionBatch};
-use crate::storage::store::account::{CastStore, MessagesPage};
+use crate::storage::store::account::{CastStore, MessagesPage, VerificationStore};
 use crate::storage::store::stores::{StoreLimits, Stores};
 use crate::storage::store::BlockStore;
 use crate::storage::trie;
 use crate::storage::trie::merkle_trie;
 use crate::utils::statsd_wrapper::StatsdClientWrapper;
 use crate::version::version::{EngineVersion, ProtocolFeature};
+use alloy_primitives::hex::FromHex;
+use alloy_primitives::Address;
 use informalsystems_malachitebft_core_types::Round;
 use itertools::Itertools;
 use merkle_trie::TrieKey;
 use std::cmp::PartialEq;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::str;
 use std::string::ToString;
 use std::sync::Arc;
@@ -91,6 +95,15 @@ pub enum MessageValidationError {
 
     #[error("fname is not registered for fid")]
     MissingFname,
+
+    #[error("invalid ethereum address")]
+    InvalidEthereumAddress,
+
+    #[error("invalid solana address")]
+    InvalidSolanaAddress,
+
+    #[error("address is not part of any verification")]
+    AddressNotPartOfVerification,
 }
 
 #[derive(Clone, Debug)]
@@ -158,7 +171,7 @@ struct CachedTransaction {
 
 pub struct ShardEngine {
     shard_id: u32,
-    network: FarcasterNetwork,
+    pub network: FarcasterNetwork,
     pub db: Arc<RocksDB>,
     senders: Senders,
     stores: Stores,
@@ -166,6 +179,7 @@ pub struct ShardEngine {
     max_messages_per_block: u32,
     messages_request_tx: Option<mpsc::Sender<MempoolMessagesRequest>>,
     pending_txn: Option<CachedTransaction>,
+    fname_signer_address: Option<alloy_primitives::Address>,
 }
 
 impl ShardEngine {
@@ -178,6 +192,7 @@ impl ShardEngine {
         statsd_client: StatsdClientWrapper,
         max_messages_per_block: u32,
         messages_request_tx: Option<mpsc::Sender<MempoolMessagesRequest>>,
+        fname_signer_address: Option<alloy_primitives::Address>,
     ) -> ShardEngine {
         // TODO: adding the trie here introduces many calls that want to return errors. Rethink unwrap strategy.
         ShardEngine {
@@ -196,6 +211,7 @@ impl ShardEngine {
             max_messages_per_block,
             messages_request_tx,
             pending_txn: None,
+            fname_signer_address,
         }
     }
 
@@ -290,7 +306,7 @@ impl ShardEngine {
         let mut snapchain_txns = self.create_transactions_from_mempool(messages)?;
         let mut events = vec![];
         let mut validation_error_count = 0;
-        let version = EngineVersion::version_for(timestamp);
+        let version = self.version_for(timestamp);
         for snapchain_txn in &mut snapchain_txns {
             let (account_root, txn_events, validation_errors) = self.replay_snapchain_txn(
                 trie_ctx,
@@ -298,6 +314,7 @@ impl ShardEngine {
                 txn_batch,
                 ProposalSource::Propose,
                 version,
+                timestamp,
             )?;
             snapchain_txn.account_root = account_root;
             events.extend(txn_events);
@@ -325,6 +342,10 @@ impl ShardEngine {
         };
 
         Ok(result)
+    }
+
+    pub fn version_for(&self, timestamp: &FarcasterTime) -> EngineVersion {
+        EngineVersion::version_for(timestamp, self.network)
     }
 
     // Groups messages by fid and creates a transaction for each fid
@@ -483,6 +504,7 @@ impl ShardEngine {
         shard_root: &[u8],
         source: ProposalSource,
         version: EngineVersion,
+        timestamp: &FarcasterTime,
     ) -> Result<Vec<HubEvent>, EngineError> {
         let now = std::time::Instant::now();
         let mut events = vec![];
@@ -519,6 +541,7 @@ impl ShardEngine {
                 txn_batch,
                 source.clone(),
                 version,
+                timestamp,
             )?;
             // Reject early if account roots fail to match (shard roots will definitely fail)
             if &account_root != &snapchain_txn.account_root {
@@ -563,6 +586,7 @@ impl ShardEngine {
         txn_batch: &mut RocksDbTransactionBatch,
         source: ProposalSource,
         version: EngineVersion,
+        timestamp: &FarcasterTime,
     ) -> Result<(Vec<u8>, Vec<HubEvent>, Vec<MessageValidationError>), EngineError> {
         let now = std::time::Instant::now();
         let total_user_messages = snapchain_txn.user_messages.len();
@@ -583,6 +607,13 @@ impl ShardEngine {
         // System messages first, then user messages and finally prunes
         for msg in &snapchain_txn.system_messages {
             if let Some(onchain_event) = &msg.on_chain_event {
+                if onchain_event.r#type() == OnChainEventType::EventTypeTierPurchase
+                    && !version.is_enabled(ProtocolFeature::FarcasterPro)
+                {
+                    warn!("Saw tier purchase while feature isn't active");
+                    continue;
+                }
+
                 let event = self
                     .stores
                     .onchain_event_store
@@ -622,7 +653,11 @@ impl ShardEngine {
                         }
                     }
                     Some(proof) => {
-                        match verification::validate_fname_transfer(fname_transfer) {
+                        match verification::validate_fname_transfer(
+                            fname_transfer,
+                            self.network,
+                            self.fname_signer_address,
+                        ) {
                             Ok(_) => {
                                 let event = UserDataStore::merge_username_proof(
                                     &self.stores.user_data_store,
@@ -718,7 +753,7 @@ impl ShardEngine {
 
         for msg in &snapchain_txn.user_messages {
             // Errors are validated based on the shard root
-            match self.validate_user_message(msg, txn_batch) {
+            match self.validate_user_message(msg, timestamp, version, txn_batch) {
                 Ok(()) => {
                     let result = self.merge_message(msg, txn_batch);
                     match result {
@@ -760,7 +795,7 @@ impl ShardEngine {
 
         for msg_type in message_types {
             let fid = snapchain_txn.fid;
-            let result = self.prune_messages(fid, msg_type, txn_batch);
+            let result = self.prune_messages(fid, msg_type, txn_batch, &version);
             match result {
                 Ok(pruned_events) => {
                     for event in pruned_events {
@@ -778,6 +813,22 @@ impl ShardEngine {
                             err
                         );
                     }
+                }
+            }
+        }
+
+        let result = self.handle_delete_side_effects(&version, &events, txn_batch);
+        match result {
+            Ok(revoke_events) => {
+                for event in revoke_events {
+                    revoked_messages_count += 1;
+                    self.update_trie(trie_ctx, &event, txn_batch)?;
+                    events.push(event);
+                }
+            }
+            Err(err) => {
+                if source != ProposalSource::Simulate {
+                    warn!("Error handling delete side effects: {:?}", err);
                 }
             }
         }
@@ -808,6 +859,92 @@ impl ShardEngine {
 
         // Return the new account root hash
         Ok((account_root, events, validation_errors))
+    }
+
+    /// Checks if a removed verification was set as the user's primary address and revokes it if necessary.
+    ///
+    /// When a verification is removed from a user's account, this function ensures that if the
+    /// removed address was also set as their primary address (for either Ethereum or Solana),
+    /// the primary address setting is also revoked to maintain consistency.
+    ///
+    fn check_and_revoke_primary_address(
+        &mut self,
+        fid: u64,
+        deleted_verification: &proto::VerificationAddAddressBody,
+        txn_batch: &mut RocksDbTransactionBatch,
+    ) -> Result<Vec<HubEvent>, MessageValidationError> {
+        // Determine protocol, parse address, and get user data type in one match
+        let (parsed_address, user_data_type) = match deleted_verification.protocol {
+            x if x == proto::Protocol::Ethereum as i32 => (
+                Address::from_slice(&deleted_verification.address).to_checksum(None),
+                UserDataType::UserDataPrimaryAddressEthereum,
+            ),
+            x if x == proto::Protocol::Solana as i32 => (
+                bs58::encode(&deleted_verification.address).into_string(),
+                UserDataType::UserDataPrimaryAddressSolana,
+            ),
+            _ => return Err(MessageValidationError::AddressNotPartOfVerification),
+        };
+
+        // Check if this address is set as the primary address
+        let user_data_result = UserDataStore::get_user_data_by_fid_and_type(
+            &self.stores.user_data_store,
+            fid,
+            user_data_type,
+        );
+
+        if let Ok(user_data) = user_data_result {
+            if let Some(data_ref) = &user_data.data {
+                if let Some(Body::UserDataBody(body)) = &data_ref.body {
+                    if body.value == parsed_address {
+                        let revoke_hub_event =
+                            self.stores.user_data_store.revoke(&user_data, txn_batch)?;
+                        return Ok(vec![revoke_hub_event]);
+                    }
+                }
+            }
+        }
+        Ok(vec![])
+    }
+
+    /// Takes a list of merge events of type VerificationAddAddress and revokes the user's primary address
+    /// if it was deleted as part of a verification remove message.
+    fn handle_delete_side_effects(
+        &mut self,
+        version: &EngineVersion,
+        events: &[HubEvent],
+        txn_batch: &mut RocksDbTransactionBatch,
+    ) -> Result<Vec<HubEvent>, EngineError> {
+        if !version.is_enabled(ProtocolFeature::PrimaryAddresses) {
+            return Ok(vec![]);
+        }
+
+        // Process verification removal hooks
+        // Look for any events with deleted verification messages. We use this as a trigger to revoke
+        // the user's primary address if it was deleted as part of a verification remove message.
+        let mut revoke_events = Vec::new();
+        for event in events {
+            if let Some(hub_event::Body::MergeMessageBody(merge_body)) = &event.body {
+                for deleted_message in &merge_body.deleted_messages {
+                    let data = deleted_message
+                        .data
+                        .as_ref()
+                        .ok_or(MessageValidationError::NoMessageData)?;
+                    match &data.body {
+                        Some(Body::VerificationAddAddressBody(body)) => {
+                            let new_revoke_events = self.check_and_revoke_primary_address(
+                                deleted_message.fid(),
+                                body,
+                                txn_batch,
+                            )?;
+                            revoke_events.extend(new_revoke_events);
+                        }
+                        _ => continue,
+                    }
+                }
+            }
+        }
+        Ok(revoke_events)
     }
 
     fn merge_message(
@@ -870,6 +1007,7 @@ impl ShardEngine {
         fid: u64,
         msg_type: MessageType,
         txn_batch: &mut RocksDbTransactionBatch,
+        version: &EngineVersion,
     ) -> Result<Vec<HubEvent>, EngineError> {
         let (current_count, max_count) = self
             .stores
@@ -902,6 +1040,17 @@ impl ShardEngine {
                 .verification_store
                 .prune_messages(fid, current_count, max_count, txn_batch)
                 .map_err(|e| EngineError::StoreError(e)),
+            MessageType::UsernameProof => {
+                // Usernameproof pruning was missing before this version
+                if version.is_enabled(ProtocolFeature::EnsValidation) {
+                    let store = &self.stores.username_proof_store;
+                    store
+                        .prune_messages(fid, current_count, max_count, txn_batch)
+                        .map_err(|e| EngineError::StoreError(e))
+                } else {
+                    Ok(vec![])
+                }
+            }
             unhandled_type => {
                 return Err(EngineError::UnsupportedMessageType(unhandled_type));
             }
@@ -1020,6 +1169,9 @@ impl ShardEngine {
             Some(proto::hub_event::Body::MergeFailure(_)) => {
                 // Merge failures don't affect the trie. They are only for event subscribers
             }
+            Some(proto::hub_event::Body::BlockConfirmedBody(_)) => {
+                // BLOCK_CONFIRMED events don't affect the trie state.
+            }
             &None => {
                 // This should never happen
                 panic!("No body in event");
@@ -1033,6 +1185,8 @@ impl ShardEngine {
     pub(crate) fn validate_user_message(
         &self,
         message: &proto::Message,
+        timestamp: &FarcasterTime,
+        version: EngineVersion,
         txn_batch: &mut RocksDbTransactionBatch,
     ) -> Result<(), MessageValidationError> {
         let now = std::time::Instant::now();
@@ -1042,7 +1196,11 @@ impl ShardEngine {
             .as_ref()
             .ok_or(MessageValidationError::NoMessageData)?;
 
-        validations::message::validate_message(message, self.network)?;
+        let is_pro_user = self
+            .stores
+            .is_pro_user(message.fid(), timestamp)
+            .map_err(|err| HubError::internal_db_error(&err.to_string()))?;
+        validations::message::validate_message(message, self.network, is_pro_user, version)?;
 
         // Check that the user has a custody address
         self.stores
@@ -1064,6 +1222,12 @@ impl ShardEngine {
                 if user_data.r#type == proto::UserDataType::Username as i32 {
                     self.validate_username(message_data.fid, &user_data.value, txn_batch)?;
                 }
+                if user_data.r#type == proto::UserDataType::UserDataPrimaryAddressEthereum as i32 {
+                    self.validate_ethereum_address_ownership(message_data.fid, &user_data.value)?;
+                }
+                if user_data.r#type == proto::UserDataType::UserDataPrimaryAddressSolana as i32 {
+                    self.validate_solana_address_ownership(message_data.fid, &user_data.value)?;
+                }
             }
             _ => {}
         }
@@ -1083,7 +1247,6 @@ impl ShardEngine {
             let proof_message = UsernameProofStore::get_username_proof(
                 &self.stores.username_proof_store,
                 &name.as_bytes().to_vec(),
-                UserNameType::UsernameTypeEnsL1 as u8,
             )
             .map_err(|e| MessageValidationError::StoreError(e))?;
             match proof_message {
@@ -1105,6 +1268,40 @@ impl ShardEngine {
             UserDataStore::get_username_proof(&self.stores.user_data_store, txn, name.as_bytes())
                 .map_err(|e| MessageValidationError::StoreError(e))
         }
+    }
+
+    fn validate_ethereum_address_ownership(
+        &self,
+        fid: u64,
+        address: &str,
+    ) -> Result<(), MessageValidationError> {
+        if address.is_empty() {
+            return Ok(());
+        }
+        // Decode Ethereum address into bytes
+        let address_instance: Address = Address::from_hex(address)
+            .map_err(|_| MessageValidationError::InvalidEthereumAddress)?;
+        self.verify_fid_owns_address(fid, Protocol::Ethereum, address_instance.as_ref())?;
+        Ok(())
+    }
+
+    fn validate_solana_address_ownership(
+        &self,
+        fid: u64,
+        address: &str,
+    ) -> Result<(), MessageValidationError> {
+        if address.is_empty() {
+            return Ok(());
+        }
+        // Decode Solana address from base58 to bytes
+        let address_bytes = bs58::decode(address)
+            .into_vec()
+            .map_err(|_| MessageValidationError::InvalidSolanaAddress)?;
+        if address_bytes.len() != 32 {
+            return Err(MessageValidationError::InvalidSolanaAddress);
+        }
+        self.verify_fid_owns_address(fid, Protocol::Solana, &address_bytes)?;
+        Ok(())
     }
 
     fn validate_username(
@@ -1164,6 +1361,7 @@ impl ShardEngine {
             shard_root,
             ProposalSource::Validate,
             shard_state_change.version,
+            &shard_state_change.timestamp,
         );
 
         match proposal_result {
@@ -1195,17 +1393,47 @@ impl ShardEngine {
         result
     }
 
+    fn compute_event_counts_by_type(events: &Vec<HubEvent>) -> HashMap<i32, u64> {
+        let mut counts_by_type = HashMap::new();
+        for event in events {
+            let count = counts_by_type.get(&event.r#type).unwrap_or(&0);
+            counts_by_type.insert(event.r#type, count + 1);
+        }
+        counts_by_type
+    }
+
     pub fn commit_and_emit_events(
         &mut self,
         shard_chunk: &ShardChunk,
-        events: Vec<HubEvent>,
-        txn: RocksDbTransactionBatch,
+        mut events: Vec<HubEvent>,
+        mut txn: RocksDbTransactionBatch,
     ) {
+        let header = shard_chunk.header.as_ref().unwrap();
+        let height = header.height.as_ref().unwrap();
+        let mut event_counts_by_type = Self::compute_event_counts_by_type(&events);
+        event_counts_by_type.insert(HubEventType::BlockConfirmed as i32, 1);
+        let mut block_confirmed = HubEvent::from(
+            proto::HubEventType::BlockConfirmed,
+            proto::hub_event::Body::BlockConfirmedBody(proto::BlockConfirmedBody {
+                block_number: height.block_number,
+                shard_index: height.shard_index,
+                timestamp: header.timestamp,
+                block_hash: shard_chunk.hash.clone(),
+                total_events: (events.len() + 1) as u64, // +1 for BLOCK_CONFIRMED itself
+                event_counts_by_type,
+            }),
+        );
+        let _block_confirmed_id = self
+            .stores
+            .event_handler
+            .commit_transaction(&mut txn, &mut block_confirmed)
+            .unwrap();
+        events.insert(0, block_confirmed);
+
         let now = std::time::Instant::now();
         self.db.commit(txn).unwrap();
         for mut event in events {
-            event.timestamp = shard_chunk.header.as_ref().unwrap().timestamp;
-            // An error here just means there are no active receivers, which is fine and will happen if there are no active subscribe rpcs
+            event.timestamp = header.timestamp;
             let _ = self.senders.events_tx.send(event);
         }
         self.stores.trie.reload(&self.db).unwrap();
@@ -1297,11 +1525,10 @@ impl ShardEngine {
                 shard_root = hex::encode(shard_root),
                 "No valid cached transaction to apply. Replaying proposal"
             );
-            // If we need to replay, reset the sequence number on the event id generator, just in case
             let header = &shard_chunk.header.as_ref().unwrap();
             let block_number = header.height.unwrap().block_number;
             self.stores.event_handler.set_current_height(block_number);
-            let version = EngineVersion::version_for(&FarcasterTime::new(header.timestamp));
+            let version = self.version_for(&FarcasterTime::new(header.timestamp));
             match self.replay_proposal(
                 trie_ctx,
                 &mut txn,
@@ -1309,6 +1536,7 @@ impl ShardEngine {
                 shard_root,
                 ProposalSource::Commit,
                 version,
+                &FarcasterTime::new(header.timestamp),
             ) {
                 Err(err) => {
                     error!("State change commit failed: {}", err);
@@ -1332,13 +1560,14 @@ impl ShardEngine {
             system_messages: vec![],
             user_messages: vec![message.clone()],
         };
-        let version = EngineVersion::version_for(&FarcasterTime::current());
+        let version = self.version_for(&FarcasterTime::current());
         let result = self.replay_snapchain_txn(
             &merkle_trie::Context::new(),
             &snapchain_txn,
             &mut txn,
             ProposalSource::Simulate,
             version,
+            &FarcasterTime::current(),
         );
 
         match result {
@@ -1457,6 +1686,48 @@ impl ShardEngine {
             fid,
             user_data_type,
         )
+    }
+
+    /// Verifies that a FID has an active verification for a specific address and protocol.
+    ///
+    /// This function checks if a user has previously verified ownership of an address by looking for
+    /// existing VerificationAddAddress messages in their verification store. It's used to ensure that
+    /// users can only set addresses as primary addresses if they have already proven ownership through
+    /// the verification process.
+    ///
+    /// # Note
+    /// Only checks for add messages since CRDT rules ensure that verification remove messages
+    /// automatically drop the corresponding add messages from the active state.
+    pub fn verify_fid_owns_address(
+        &self,
+        fid: u64,
+        protocol: Protocol,
+        address: &[u8],
+    ) -> Result<(), MessageValidationError> {
+        let page_result =
+            VerificationStore::get_verification_add(&self.stores.verification_store, fid, address)
+                .map_err(|_| {
+                    MessageValidationError::StoreError(HubError::invalid_internal_state(
+                        "Unable to get verifications by fid",
+                    ))
+                })?;
+        match page_result {
+            Some(message) => {
+                let verification = match &message.data.as_ref().unwrap().body.as_ref().unwrap() {
+                    Body::VerificationAddAddressBody(body) => body,
+                    _ => unreachable!(),
+                };
+
+                if verification.protocol == protocol as i32 {
+                    Ok(())
+                } else {
+                    Err(MessageValidationError::AddressNotPartOfVerification)
+                }
+            }
+            None => {
+                return Err(MessageValidationError::AddressNotPartOfVerification);
+            }
+        }
     }
 
     pub fn get_verifications_by_fid(&self, fid: u64) -> Result<MessagesPage, HubError> {

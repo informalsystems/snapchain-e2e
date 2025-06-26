@@ -9,7 +9,7 @@ mod tests {
     use std::time::{Duration, Instant};
     use tokio::time::{sleep, timeout};
 
-    use crate::connectors::onchain_events::L1Client;
+    use crate::connectors::onchain_events::{Chain, ChainAPI, ChainClients};
     use crate::core::validations::{self, verification::VerificationAddressClaim};
     use crate::mempool::mempool::{self, Mempool};
     use crate::mempool::routing;
@@ -18,7 +18,8 @@ mod tests {
     use crate::proto::hub_service_server::HubService;
     use crate::proto::{
         self, EventRequest, EventsRequest, HubEvent, HubEventType, OnChainEventType, ShardChunk,
-        UserNameProof, UserNameType, UsernameProofRequest, VerificationAddAddressBody,
+        UserDataType, UserNameProof, UserNameType, UsernameProofRequest,
+        VerificationAddAddressBody,
     };
     use crate::proto::{FidRequest, SubscribeRequest};
     use crate::storage::db::{self, RocksDB, RocksDbTransactionBatch};
@@ -56,14 +57,17 @@ mod tests {
     struct MockL1Client {}
 
     #[async_trait]
-    impl L1Client for MockL1Client {
+    impl ChainAPI for MockL1Client {
         async fn resolve_ens_name(
             &self,
-            _name: String,
+            name: String,
         ) -> Result<alloy_primitives::Address, EnsError> {
-            let addr = alloy_primitives::Address::from_slice(
-                &hex::decode("91031dcfdea024b4d51e775486111d2b2a715871").unwrap(),
-            );
+            let address_str = match name.as_str() {
+                "username.eth" => "91031dcfdea024b4d51e775486111d2b2a715871",
+                "username.base.eth" => "849151d7D0bF1F34b70d5caD5149D28CC2308bf1",
+                _ => return Err(EnsError::ResolverNotFound(name)),
+            };
+            let addr = alloy_primitives::Address::from_slice(&hex::decode(address_str).unwrap());
             future::ready(Ok(addr)).await
         }
 
@@ -165,6 +169,15 @@ mod tests {
             .insert("authorization", auth.parse().unwrap());
     }
 
+    async fn submit_message(
+        service: &MyHubService,
+        message: proto::Message,
+    ) -> Result<tonic::Response<proto::Message>, tonic::Status> {
+        let mut request = Request::new(message);
+        add_auth_header(&mut request, USER_NAME, PASSWORD);
+        service.submit_message(request).await
+    }
+
     async fn make_server(
         rpc_auth: Option<String>,
     ) -> (
@@ -181,13 +194,11 @@ mod tests {
         let limits = test_helper::limits::test_store_limits();
         let (engine1, _) = test_helper::new_engine_with_options(test_helper::EngineOptions {
             limits: Some(limits.clone()),
-            db: None,
-            messages_request_tx: None,
+            ..Default::default()
         });
         let (engine2, _) = test_helper::new_engine_with_options(test_helper::EngineOptions {
             limits: Some(limits.clone()),
-            db: None,
-            messages_request_tx: None,
+            ..Default::default()
         });
         let db1 = engine1.db.clone();
         let db2 = engine2.db.clone();
@@ -228,6 +239,7 @@ mod tests {
         let (_shard_decision_tx, shard_decision_rx) = broadcast::channel(1000);
         let mut mempool = Mempool::new(
             mempool::Config::default(),
+            engine1.network,
             mempool_rx,
             msgs_request_rx,
             num_shards,
@@ -238,6 +250,17 @@ mod tests {
         );
         tokio::spawn(async move { mempool.run().await });
 
+        let mut chain_clients = ChainClients {
+            chain_api_map: HashMap::new(),
+        };
+        chain_clients.chain_api_map.insert(
+            Chain::EthMainnet,
+            Box::new(MockL1Client {}) as Box<dyn ChainAPI>,
+        );
+        chain_clients.chain_api_map.insert(
+            Chain::BaseMainnet,
+            Box::new(MockL1Client {}) as Box<dyn ChainAPI>,
+        );
         (
             stores.clone(),
             senders.clone(),
@@ -249,10 +272,10 @@ mod tests {
                 senders,
                 statsd_client,
                 num_shards,
-                proto::FarcasterNetwork::Testnet,
+                proto::FarcasterNetwork::Devnet,
                 message_router,
                 mempool_tx.clone(),
-                Some(Box::new(MockL1Client {})),
+                chain_clients,
                 "0.1.2".to_string(),
                 "asddef".to_string(),
             ),
@@ -382,11 +405,10 @@ mod tests {
         HubEvent::put_event_transaction(&mut txn, &hub_event).unwrap();
         db.commit(txn).unwrap();
 
-        let mut request = Request::new(proto::EventRequest {
+        let request = Request::new(proto::EventRequest {
             id: event_id,
             shard_index: 1,
         });
-        add_auth_header(&mut request, USER_NAME, PASSWORD);
         let response = service.get_event(request).await.unwrap();
 
         let hub_event_response = response.into_inner();
@@ -402,11 +424,10 @@ mod tests {
 
         write_events_to_db(stores.get(&1u32).unwrap().shard_store.db.clone(), 1).await;
 
-        let mut request = Request::new(proto::EventRequest {
+        let request = Request::new(proto::EventRequest {
             id: 99999, // Junk event ID
             shard_index: 1,
         });
-        add_auth_header(&mut request, USER_NAME, PASSWORD);
         let response = service.get_event(request).await;
 
         assert!(response.is_err());
@@ -422,11 +443,10 @@ mod tests {
         let event_id = 12345;
         write_events_to_db(stores.get(&1u32).unwrap().shard_store.db.clone(), 1).await;
 
-        let mut request = Request::new(proto::EventRequest {
+        let request = Request::new(proto::EventRequest {
             id: event_id,
             shard_index: 999, // junk shard
         });
-        add_auth_header(&mut request, USER_NAME, PASSWORD);
         let response = service.get_event(request).await;
 
         // Validate the response
@@ -443,11 +463,10 @@ mod tests {
         let event_id = 12345;
         write_events_to_db(stores.get(&1u32).unwrap().shard_store.db.clone(), 1).await;
 
-        let mut request = Request::new(proto::EventRequest {
+        let request = Request::new(proto::EventRequest {
             id: event_id,
             shard_index: 0,
         });
-        add_auth_header(&mut request, USER_NAME, PASSWORD);
         let response = service.get_event(request).await;
 
         assert!(response.is_err());
@@ -527,10 +546,7 @@ mod tests {
         // Message with no fid registration
         let invalid_message = messages_factory::casts::create_cast_add(123, "test", None, None);
 
-        let mut request = Request::new(invalid_message);
-        add_auth_header(&mut request, USER_NAME, PASSWORD);
-
-        let response = service.submit_message(request).await.unwrap_err();
+        let response = submit_message(&service, invalid_message).await.unwrap_err();
 
         assert_eq!(response.code(), tonic::Code::InvalidArgument);
         assert_eq!(
@@ -559,9 +575,7 @@ mod tests {
         test_helper::commit_message(&mut engine1, &valid_message).await;
 
         // Submitting a duplicate message should return an error
-        let mut request = Request::new(valid_message);
-        add_auth_header(&mut request, USER_NAME, PASSWORD);
-        let response = service.submit_message(request).await.unwrap_err();
+        let response = submit_message(&service, valid_message).await.unwrap_err();
         assert_eq!(response.code(), tonic::Code::InvalidArgument);
         assert_eq!(
             response.message(),
@@ -699,11 +713,18 @@ mod tests {
             reverse: None,
         });
         let res = service.get_events(req).await.unwrap();
-        assert_events(&res.into_inner().events, &shard_chunks);
+        let inner_res = res.into_inner();
+        let filtered_events: Vec<HubEvent> = inner_res
+            .events
+            .into_iter()
+            .filter(|event| event.r#type == HubEventType::MergeMessage as i32)
+            .collect();
+        assert_eq!(filtered_events.len(), 4);
+        assert_events(&filtered_events, &shard_chunks);
 
         let req = Request::new(EventRequest {
             shard_index: 1,
-            id: HubEventIdGenerator::make_event_id(
+            id: HubEventIdGenerator::make_event_id_for_block_number(
                 shard_chunks[2]
                     .header
                     .as_ref()
@@ -711,7 +732,6 @@ mod tests {
                     .height
                     .unwrap()
                     .block_number,
-                0,
             ),
         });
         let res = service.get_event(req).await.unwrap();
@@ -732,7 +752,7 @@ mod tests {
 
         let username_proof = UserNameProof {
             timestamp: messages_factory::farcaster_time() as u64,
-            name: "username.eth".to_string().encode_to_vec(),
+            name: b"username.eth".to_vec(),
             owner,
             signature: "signature".to_string().encode_to_vec(),
             fid,
@@ -747,6 +767,56 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_basename_proof() {
+        let (_stores, _senders, [mut engine1, mut _engine2], service) = make_server(None).await;
+        let signer = test_helper::default_signer();
+        let owner = hex::decode("849151d7D0bF1F34b70d5caD5149D28CC2308bf1").unwrap();
+        let fid = SHARD1_FID;
+
+        test_helper::register_user(fid, signer.clone(), owner.clone(), &mut engine1).await;
+
+        let username_proof = UserNameProof {
+            timestamp: messages_factory::farcaster_time() as u64,
+            name: b"username.base.eth".to_vec(),
+            owner,
+            signature: "signature".to_string().encode_to_vec(),
+            fid,
+            r#type: UserNameType::UsernameTypeBasename as i32,
+        };
+
+        let result = service
+            .validate_ens_username_proof(fid, &username_proof)
+            .await;
+        assert!(result.is_ok());
+
+        let user_data_add = messages_factory::user_data::create_user_data_add(
+            fid,
+            UserDataType::Username,
+            &"username.base.eth".to_string(),
+            None,
+            None,
+        );
+
+        // User data add fails because the proof is not committed yet
+        let result = submit_message(&service, user_data_add.clone()).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code(), tonic::Code::NotFound);
+
+        let proof_message =
+            messages_factory::username_proof::create_from_proof(&username_proof, None);
+        test_helper::commit_message(&mut engine1, &proof_message).await;
+
+        // Now the user data add should succeed
+        let result = submit_message(&service, user_data_add).await;
+
+        let error = result.unwrap_err();
+        // Ensure that it's not a validation error, if it got as far as adding to the mempool, validation passed
+        // TODO: We should fix the test setup so adding to mempool does not fail
+        assert_eq!(error.code(), tonic::Code::Unavailable);
+        assert_eq!(error.message(), "unavailable/Error adding to mempool");
+    }
+
+    #[tokio::test]
     async fn test_ens_proof_with_bad_owner() {
         let (_stores, _senders, [mut engine1, mut _engine2], service) = make_server(None).await;
         let signer = test_helper::default_signer();
@@ -757,7 +827,7 @@ mod tests {
 
         let username_proof = UserNameProof {
             timestamp: messages_factory::farcaster_time() as u64,
-            name: "username.eth".to_string().encode_to_vec(),
+            name: b"username.eth".to_vec(),
             owner: "100000000000000000".to_string().encode_to_vec(),
             signature: "signature".to_string().encode_to_vec(),
             fid,
@@ -788,7 +858,7 @@ mod tests {
 
         let username_proof = UserNameProof {
             timestamp: messages_factory::farcaster_time() as u64,
-            name: "username.eth".to_string().encode_to_vec(),
+            name: b"username.eth".to_vec(),
             owner,
             signature: "signature".to_string().encode_to_vec(),
             fid,
@@ -826,7 +896,7 @@ mod tests {
 
         let username_proof = UserNameProof {
             timestamp: messages_factory::farcaster_time() as u64,
-            name: "username.eth".to_string().encode_to_vec(),
+            name: b"username.eth".to_vec(),
             owner: hex::decode("91031dcfdea024b4d51e775486111d2b2a715871").unwrap(),
             signature: signature.encode_to_vec(),
             fid,
@@ -980,6 +1050,148 @@ mod tests {
             .get_all_cast_messages_by_fid(Request::new(bulk_casts_request))
             .await;
         test_helper::assert_contains_all_messages(&response, &[&cast_add2, &cast_remove]);
+
+        // Returns casts even if page token is empty
+        let empty_page_token_request = proto::FidTimestampRequest {
+            fid: SHARD1_FID,
+            page_size: None,
+            page_token: Some(vec![]),
+            reverse: None,
+            start_timestamp: None,
+            stop_timestamp: None,
+        };
+        let response = service
+            .get_all_cast_messages_by_fid(Request::new(empty_page_token_request))
+            .await;
+        test_helper::assert_contains_all_messages(&response, &[&cast_add2, &cast_remove]);
+    }
+
+    #[tokio::test]
+    async fn test_get_casts_by_parent_hash() {
+        let (_, _, [mut engine1, mut engine2], service) = make_server(None).await;
+        let engine1 = &mut engine1;
+        let engine2 = &mut engine2;
+        test_helper::register_user(
+            SHARD1_FID,
+            test_helper::default_signer(),
+            test_helper::default_custody_address(),
+            engine1,
+        )
+        .await;
+        test_helper::register_user(
+            SHARD2_FID,
+            test_helper::default_signer(),
+            test_helper::default_custody_address(),
+            engine2,
+        )
+        .await;
+        let original_cast =
+            messages_factory::casts::create_cast_add(SHARD1_FID, "test", None, None);
+        let timestamp = original_cast.data.as_ref().unwrap().timestamp;
+        let reply_1 = messages_factory::casts::create_cast_with_parent(
+            SHARD1_FID,
+            "reply 1",
+            SHARD1_FID,
+            &original_cast.hash,
+            Some(timestamp + 1),
+            None,
+        );
+        let reply_2 = messages_factory::casts::create_cast_with_parent(
+            SHARD1_FID,
+            "reply 2",
+            SHARD1_FID,
+            &original_cast.hash,
+            Some(timestamp + 2),
+            None,
+        );
+        let reply_3_another_shard = messages_factory::casts::create_cast_with_parent(
+            SHARD2_FID,
+            "reply 3",
+            SHARD1_FID,
+            &original_cast.hash,
+            Some(timestamp + 3),
+            None,
+        );
+        let reply_4_another_shard = messages_factory::casts::create_cast_with_parent(
+            SHARD2_FID,
+            "reply 4",
+            SHARD1_FID,
+            &original_cast.hash,
+            Some(timestamp + 4),
+            None,
+        );
+
+        test_helper::commit_message(engine1, &original_cast).await;
+        test_helper::commit_message(engine1, &reply_1).await;
+        test_helper::commit_message(engine1, &reply_2).await;
+        test_helper::commit_message(engine2, &reply_3_another_shard).await;
+        test_helper::commit_message(engine2, &reply_4_another_shard).await;
+
+        let response = service
+            .get_casts_by_parent(Request::new(proto::CastsByParentRequest {
+                parent: Some(proto::casts_by_parent_request::Parent::ParentCastId(
+                    proto::CastId {
+                        fid: SHARD1_FID,
+                        hash: original_cast.hash.clone(),
+                    },
+                )),
+                page_size: Some(1),
+                page_token: None,
+                reverse: None,
+            }))
+            .await
+            .unwrap();
+        test_helper::assert_contains_all_messages(&response, &[&reply_1, &reply_3_another_shard]);
+
+        let page_token = response.get_ref().next_page_token.clone();
+        let response = service
+            .get_casts_by_parent(Request::new(proto::CastsByParentRequest {
+                parent: Some(proto::casts_by_parent_request::Parent::ParentCastId(
+                    proto::CastId {
+                        fid: SHARD1_FID,
+                        hash: original_cast.hash.clone(),
+                    },
+                )),
+                page_size: Some(2),
+                page_token: page_token,
+                reverse: None,
+            }))
+            .await
+            .unwrap();
+        test_helper::assert_contains_all_messages(&response, &[&reply_2, &reply_4_another_shard]);
+
+        // Test reverse pagination
+        let response = service
+            .get_casts_by_parent(Request::new(proto::CastsByParentRequest {
+                parent: Some(proto::casts_by_parent_request::Parent::ParentCastId(
+                    proto::CastId {
+                        fid: SHARD1_FID,
+                        hash: original_cast.hash.clone(),
+                    },
+                )),
+                page_size: Some(1),
+                page_token: None,
+                reverse: Some(true),
+            }))
+            .await
+            .unwrap();
+
+        let page_token = response.get_ref().next_page_token.clone();
+        let response = service
+            .get_casts_by_parent(Request::new(proto::CastsByParentRequest {
+                parent: Some(proto::casts_by_parent_request::Parent::ParentCastId(
+                    proto::CastId {
+                        fid: SHARD1_FID,
+                        hash: original_cast.hash.clone(),
+                    },
+                )),
+                page_size: Some(2),
+                page_token: page_token.clone(),
+                reverse: Some(true),
+            }))
+            .await
+            .unwrap();
+        test_helper::assert_contains_all_messages(&response, &[&reply_1, &reply_3_another_shard]);
     }
 
     #[tokio::test]
@@ -1280,6 +1492,64 @@ mod tests {
         } else {
             panic!("Expected IdRegisterEventBody");
         }
+    }
+
+    #[tokio::test]
+    async fn test_get_fid_address_type() {
+        let (_stores, _senders, [mut engine1, _], service) = make_server(None).await;
+        let fid = SHARD1_FID;
+        let signer = test_helper::default_signer();
+        let custody_address = test_helper::default_custody_address();
+        let auth_signer = generate_signer(); // Generate a signing key for auth
+        let auth_key = auth_signer.verifying_key().as_bytes().to_vec(); // Auth key with keyType=2
+
+        // Register user with custody address
+        test_helper::register_user(fid, signer.clone(), custody_address.clone(), &mut engine1)
+            .await;
+
+        // Add an auth key (keyType=2)
+        let auth_signer_event = events_factory::create_signer_event(
+            fid,
+            auth_signer,
+            proto::SignerEventType::Add,
+            None,
+            Some(2), // keyType=2 for auth
+        );
+        commit_event(&mut engine1, &auth_signer_event).await;
+
+        // Test custody address
+        let request = Request::new(proto::FidAddressTypeRequest {
+            fid,
+            address: custody_address.clone(),
+        });
+        let response = service.get_fid_address_type(request).await.unwrap();
+        let result = response.get_ref();
+        assert!(result.is_custody);
+        assert!(!result.is_auth);
+        assert!(!result.is_verified);
+
+        // Test auth address
+        let request = Request::new(proto::FidAddressTypeRequest {
+            fid,
+            address: auth_key.clone(),
+        });
+        let response = service.get_fid_address_type(request).await.unwrap();
+        let result = response.get_ref();
+        assert!(!result.is_custody);
+        assert!(result.is_auth);
+        assert!(!result.is_verified);
+
+        // Test unknown address
+        let unknown_address = hex::decode("1234567890abcdef1234567890abcdef12345678").unwrap();
+        let request = Request::new(proto::FidAddressTypeRequest {
+            fid,
+            address: unknown_address,
+        });
+        let response = service.get_fid_address_type(request).await.unwrap();
+        let result = response.get_ref();
+        assert!(!result.is_custody);
+        assert!(!result.is_auth);
+        assert!(!result.is_verified);
     }
 
     #[tokio::test]

@@ -28,8 +28,7 @@ mod tests {
                     verifications: 0,
                 },
             }),
-            db: None,
-            messages_request_tx: None,
+            ..Default::default()
         });
         let mut shard_stores = HashMap::new();
         shard_stores.insert(engine.shard_id(), engine.get_stores());

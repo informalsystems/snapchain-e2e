@@ -3,10 +3,13 @@ use super::account::{
     VerificationStore, VerificationStoreDef,
 };
 use crate::core::error::HubError;
-use crate::proto::MessageType;
+use crate::core::util::FarcasterTime;
+use crate::network::http_server::TierType;
 use crate::proto::{
-    HubEvent, StorageLimit, StorageLimitsResponse, StorageUnitDetails, StorageUnitType, StoreType,
+    self, HubEvent, StorageLimit, StorageLimitsResponse, StorageUnitDetails, StorageUnitType,
+    StoreType,
 };
+use crate::proto::{MessageType, TierDetails};
 use crate::storage::constants::PAGE_SIZE_MAX;
 use crate::storage::db::{PageOptions, RocksDB, RocksDbTransactionBatch};
 use crate::storage::store::account::{
@@ -243,6 +246,18 @@ impl Stores {
         total_count
     }
 
+    pub fn is_pro_user(
+        &self,
+        fid: u64,
+        block_timestamp: &FarcasterTime,
+    ) -> Result<bool, OnchainEventStorageError> {
+        Ok(self.onchain_event_store.is_tier_subscription_active_at(
+            proto::TierType::Pro,
+            fid,
+            block_timestamp,
+        )?)
+    }
+
     pub fn get_storage_limits(&self, fid: u64) -> Result<StorageLimitsResponse, StoresError> {
         let slot = self
             .onchain_event_store
@@ -296,6 +311,14 @@ impl Stores {
                     unit_size: slot.units,
                 },
             ],
+            tier_subscriptions: vec![TierDetails {
+                tier_type: TierType::Pro as i32,
+                expires_at: self.onchain_event_store.tier_subscription_exires_at(
+                    proto::TierType::Pro,
+                    fid,
+                    None,
+                )?,
+            }],
         };
         Ok(response)
     }

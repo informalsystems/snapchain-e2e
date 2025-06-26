@@ -1,5 +1,6 @@
 use crate::{
-    connectors, consensus, mempool,
+    connectors::{self},
+    consensus, mempool,
     network::{self, http_server},
     proto::FarcasterNetwork,
     storage,
@@ -57,6 +58,7 @@ pub struct Config {
     pub log_format: String,
     pub fnames: connectors::fname::Config,
     pub onchain_events: connectors::onchain_events::Config,
+    pub base_onchain_events: connectors::onchain_events::Config,
     pub consensus: consensus::consensus::Config,
     pub gossip: network::gossip::Config,
     pub mempool: mempool::mempool::Config,
@@ -82,6 +84,7 @@ impl Default for Config {
             log_format: "text".to_string(),
             fnames: connectors::fname::Config::default(),
             onchain_events: connectors::onchain_events::Config::default(),
+            base_onchain_events: connectors::onchain_events::Config::default(),
             consensus: consensus::consensus::Config::default(),
             gossip: network::gossip::Config::default(),
             mempool: mempool::mempool::Config::default(),
