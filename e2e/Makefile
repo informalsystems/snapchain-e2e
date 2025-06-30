@@ -29,7 +29,7 @@ start:
 	cargo run --bin testnet_init_users
 
 load:
-	cargo run --bin testnet_submit_messages
+	cargo run --bin testnet_spam -- --rate 100 --max-time 60
 
 stop:
 	docker compose down --remove-orphans --volumes
